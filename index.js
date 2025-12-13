@@ -11,7 +11,6 @@ const TIMEOUT = 10000;
 const MAX_LATENCY = 2500;
 const THREADS = 100;
 
-// Список стоп-слов (дата-центры)
 const BLOCK_KEYWORDS = [
     'cloud', 'host', 'vps', 'amazon', 'aws', 'digitalocean', 
     'google', 'microsoft', 'azure', 'hetzner', 'ovh', 
@@ -19,13 +18,11 @@ const BLOCK_KEYWORDS = [
     'alibaba', 'oracle', 'linode'
 ];
 
-// Ссылка ОБЯЗАТЕЛЬНО c HTTPS. 
-// Если прокси не поддерживает HTTPS, запрос не пройдет и прокси отсеется.
 const CHECK_URL = 'https://ipwho.is/'; 
 
 const limit = pLimit(THREADS);
 
-// 1. Загрузка (Скачивание списков)
+// 1. Загрузка и ЖЕСТКАЯ очистка
 async function fetchProxies() {
     if (!fs.existsSync(SOURCES_FILE)) return [];
     
@@ -42,11 +39,23 @@ async function fetchProxies() {
             const lines = (typeof res.data === 'string' ? res.data : JSON.stringify(res.data)).split(/\r?\n/);
             lines.forEach(line => {
                 const clean = line.trim();
-                // Фильтр 1: Сразу убираем SOCKS4 по названию, если оно есть
                 if (clean.toLowerCase().includes('socks4')) return; 
                 
-                if (clean.match(/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+/)) {
-                    allProxies.add(clean);
+                // ИСПРАВЛЕНИЕ 1: Регулярка теперь вытаскивает только IP:PORT
+                // Игнорируя всё, что написано после (страны, комментарии)
+                // Находит 1.1.1.1:80 даже если строка "1.1.1.1:80 United States"
+                const match = clean.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)/);
+                
+                if (match) {
+                    // Если в исходной строке был протокол, пробуем его сохранить
+                    let ipPort = match[0];
+                    if (clean.includes('socks5://')) {
+                        allProxies.add(`socks5://${ipPort}`);
+                    } else if (clean.includes('https://') || clean.includes('http://')) {
+                        allProxies.add(`http://${ipPort}`);
+                    } else {
+                        allProxies.add(ipPort); // Просто IP:PORT
+                    }
                 }
             });
         })
@@ -69,7 +78,6 @@ async function tryRequest(agent) {
         });
         const latency = Date.now() - start;
         
-        // Проверяем статус 200 и задержку
         if (response.status === 200 && response.data && latency <= MAX_LATENCY) {
             return { success: true, data: response.data };
         }
@@ -79,66 +87,68 @@ async function tryRequest(agent) {
     return { success: false };
 }
 
-// 2. Логика проверки (HTTPS & SOCKS5 Only)
+// 2. Логика проверки
 async function checkProxy(proxyStr) {
-    // Подготовка: если протокол не указан, считаем это "технической строкой"
+    // Подготовка технической строки
     let technicalUrl = proxyStr;
     if (!technicalUrl.includes('://')) {
         technicalUrl = `http://${technicalUrl}`;
     }
 
     let agent;
-    let finalProxyName = ''; // То, что запишем в файл
+    let finalProxyName = '';
 
-    // --- СЦЕНАРИЙ А: Протокол уже указан в файле ---
-    if (proxyStr.includes('://')) {
-        if (proxyStr.startsWith('socks5')) {
-            // Если это SOCKS5 -> проверяем
-            agent = new SocksProxyAgent(proxyStr);
-            const result = await tryRequest(agent);
-            if (result.success && !isDatacenter(result.data)) return proxyStr;
-        } 
-        else if (proxyStr.startsWith('http')) {
-            // Если это HTTP -> проверяем, тянет ли он HTTPS
-            agent = new HttpsProxyAgent(proxyStr);
-            const result = await tryRequest(agent);
-            if (result.success && !isDatacenter(result.data)) return proxyStr;
+    // ИСПРАВЛЕНИЕ 2: Оборачиваем создание агентов в try-catch,
+    // чтобы кривой URL не ронял весь скрипт
+    try {
+        // --- СЦЕНАРИЙ А: Протокол уже указан ---
+        if (proxyStr.includes('://')) {
+            if (proxyStr.startsWith('socks5')) {
+                agent = new SocksProxyAgent(proxyStr);
+                const result = await tryRequest(agent);
+                if (result.success && !isDatacenter(result.data)) return proxyStr;
+            } 
+            else if (proxyStr.startsWith('http')) {
+                agent = new HttpsProxyAgent(proxyStr);
+                const result = await tryRequest(agent);
+                if (result.success && !isDatacenter(result.data)) return proxyStr;
+            }
+            return null;
         }
-        // Если socks4 -> игнорируем
+
+        // --- СЦЕНАРИЙ Б: Голый IP:PORT ---
+        const ipPort = technicalUrl.split('://')[1];
+        
+        // Попытка 1: SOCKS5
+        const socksUrl = `socks5://${ipPort}`;
+        // ВАЖНО: new SocksProxyAgent может упасть, если url кривой
+        try { agent = new SocksProxyAgent(socksUrl); } catch(e) { return null; }
+        
+        let result = await tryRequest(agent);
+        if (result.success) {
+            finalProxyName = socksUrl;
+        } else {
+            // Попытка 2: HTTPS
+            const httpUrl = `http://${ipPort}`;
+            try { agent = new HttpsProxyAgent(httpUrl); } catch(e) { return null; }
+            
+            result = await tryRequest(agent);
+            if (result.success) {
+                finalProxyName = httpUrl;
+            }
+        }
+
+        if (!result || !result.success) return null;
+        if (isDatacenter(result.data)) return null;
+
+        return finalProxyName;
+
+    } catch (globalError) {
+        // Если что-то пошло совсем не так с этим конкретным прокси — просто пропускаем его
         return null;
     }
-
-    // --- СЦЕНАРИЙ Б: Голый IP:PORT (автоопределение) ---
-    
-    // Попытка 1: Пробуем как SOCKS5
-    const ipPort = technicalUrl.split('://')[1];
-    const socksUrl = `socks5://${ipPort}`;
-    agent = new SocksProxyAgent(socksUrl);
-    let result = await tryRequest(agent);
-    
-    if (result.success) {
-        finalProxyName = socksUrl; // Ура, это SOCKS5
-    } else {
-        // Попытка 2: Пробуем как HTTPS (через http-агент)
-        // (Примечание: http-прокси записываются как http://, но мы проверяем их на https ссылке)
-        const httpUrl = `http://${ipPort}`;
-        agent = new HttpsProxyAgent(httpUrl);
-        result = await tryRequest(agent);
-        
-        if (result.success) {
-            finalProxyName = httpUrl; // Ура, это HTTPS-совместимый прокси
-        }
-    }
-
-    if (!result || !result.success) return null; // Не подошло ничего
-
-    // Фильтр дата-центров
-    if (isDatacenter(result.data)) return null;
-
-    return finalProxyName;
 }
 
-// Проверка на стоп-слова
 function isDatacenter(data) {
     const connection = data.connection || {};
     const isp = (connection.isp || '').toLowerCase();
@@ -149,7 +159,7 @@ function isDatacenter(data) {
 }
 
 async function main() {
-    console.log('--- STARTING (Mode: SOCKS5 & HTTPS-Capable) ---');
+    console.log('--- STARTING (Mode: Robust SOCKS5 & HTTPS) ---');
     const proxies = await fetchProxies();
     
     if (proxies.length === 0) {
