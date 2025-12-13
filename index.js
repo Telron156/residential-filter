@@ -7,11 +7,11 @@ const pLimit = require('p-limit');
 // === НАСТРОЙКИ ===
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
-const TIMEOUT = 10000;      // 10 секунд на соединение
-const MAX_LATENCY = 2500;   // Максимум 2.5 сек отклик
-const THREADS = 100;        // Количество одновременных проверок
+const TIMEOUT = 10000;
+const MAX_LATENCY = 2500;
+const THREADS = 100;
 
-// Стоп-слова (фильтр дата-центров)
+// Список стоп-слов (дата-центры)
 const BLOCK_KEYWORDS = [
     'cloud', 'host', 'vps', 'amazon', 'aws', 'digitalocean', 
     'google', 'microsoft', 'azure', 'hetzner', 'ovh', 
@@ -19,10 +19,13 @@ const BLOCK_KEYWORDS = [
     'alibaba', 'oracle', 'linode'
 ];
 
-const CHECK_URL = 'http://ip-api.com/json';
+// Ссылка ОБЯЗАТЕЛЬНО c HTTPS. 
+// Если прокси не поддерживает HTTPS, запрос не пройдет и прокси отсеется.
+const CHECK_URL = 'https://ipwho.is/'; 
+
 const limit = pLimit(THREADS);
 
-// 1. Функция получения прокси из ссылок
+// 1. Загрузка (Скачивание списков)
 async function fetchProxies() {
     if (!fs.existsSync(SOURCES_FILE)) return [];
     
@@ -39,12 +42,13 @@ async function fetchProxies() {
             const lines = (typeof res.data === 'string' ? res.data : JSON.stringify(res.data)).split(/\r?\n/);
             lines.forEach(line => {
                 const clean = line.trim();
-                // Ищем строки похожие на IP:PORT
+                // Фильтр 1: Сразу убираем SOCKS4 по названию, если оно есть
+                if (clean.toLowerCase().includes('socks4')) return; 
+                
                 if (clean.match(/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+/)) {
                     allProxies.add(clean);
                 }
             });
-            console.log(`Fetched from: ${url}`);
         })
         .catch(err => console.log(`Error loading ${url}: ${err.message}`))
     );
@@ -53,24 +57,10 @@ async function fetchProxies() {
     return Array.from(allProxies);
 }
 
-// 2. Функция проверки одного прокси
-async function checkProxy(proxyStr) {
-    let agent;
-    let proxyUrl = proxyStr;
-
-    // Добавляем http:// если протокол не указан
-    if (!proxyUrl.includes('://')) {
-        proxyUrl = `http://${proxyUrl}`;
-    }
-
+// Вспомогательная функция запроса
+async function tryRequest(agent) {
+    const start = Date.now();
     try {
-        if (proxyUrl.startsWith('socks')) {
-            agent = new SocksProxyAgent(proxyUrl);
-        } else {
-            agent = new HttpsProxyAgent(proxyUrl);
-        }
-
-        const start = Date.now();
         const response = await axios.get(CHECK_URL, {
             httpAgent: agent,
             httpsAgent: agent,
@@ -78,46 +68,98 @@ async function checkProxy(proxyStr) {
             validateStatus: () => true
         });
         const latency = Date.now() - start;
-
-        // Фильтр 1: Доступность
-        if (response.status !== 200 || !response.data) return null;
         
-        // Фильтр 2: Пинг
-        if (latency > MAX_LATENCY) return null;
-
-        const isp = (response.data.isp || '').toLowerCase();
-        const org = (response.data.org || '').toLowerCase();
-        const fullInfo = `${isp} ${org}`;
-
-        // Фильтр 3: Стоп-слова
-        const isBad = BLOCK_KEYWORDS.some(word => fullInfo.includes(word));
-        if (isBad) return null;
-
-        // Если всё ок
-        return proxyStr;
-
+        // Проверяем статус 200 и задержку
+        if (response.status === 200 && response.data && latency <= MAX_LATENCY) {
+            return { success: true, data: response.data };
+        }
     } catch (e) {
-        return null;
+        return { success: false };
     }
+    return { success: false };
 }
 
-// Главный запуск
-async function main() {
-    console.log('--- STARTING ---');
+// 2. Логика проверки (HTTPS & SOCKS5 Only)
+async function checkProxy(proxyStr) {
+    // Подготовка: если протокол не указан, считаем это "технической строкой"
+    let technicalUrl = proxyStr;
+    if (!technicalUrl.includes('://')) {
+        technicalUrl = `http://${technicalUrl}`;
+    }
+
+    let agent;
+    let finalProxyName = ''; // То, что запишем в файл
+
+    // --- СЦЕНАРИЙ А: Протокол уже указан в файле ---
+    if (proxyStr.includes('://')) {
+        if (proxyStr.startsWith('socks5')) {
+            // Если это SOCKS5 -> проверяем
+            agent = new SocksProxyAgent(proxyStr);
+            const result = await tryRequest(agent);
+            if (result.success && !isDatacenter(result.data)) return proxyStr;
+        } 
+        else if (proxyStr.startsWith('http')) {
+            // Если это HTTP -> проверяем, тянет ли он HTTPS
+            agent = new HttpsProxyAgent(proxyStr);
+            const result = await tryRequest(agent);
+            if (result.success && !isDatacenter(result.data)) return proxyStr;
+        }
+        // Если socks4 -> игнорируем
+        return null;
+    }
+
+    // --- СЦЕНАРИЙ Б: Голый IP:PORT (автоопределение) ---
     
-    // Шаг 1: Скачиваем
+    // Попытка 1: Пробуем как SOCKS5
+    const ipPort = technicalUrl.split('://')[1];
+    const socksUrl = `socks5://${ipPort}`;
+    agent = new SocksProxyAgent(socksUrl);
+    let result = await tryRequest(agent);
+    
+    if (result.success) {
+        finalProxyName = socksUrl; // Ура, это SOCKS5
+    } else {
+        // Попытка 2: Пробуем как HTTPS (через http-агент)
+        // (Примечание: http-прокси записываются как http://, но мы проверяем их на https ссылке)
+        const httpUrl = `http://${ipPort}`;
+        agent = new HttpsProxyAgent(httpUrl);
+        result = await tryRequest(agent);
+        
+        if (result.success) {
+            finalProxyName = httpUrl; // Ура, это HTTPS-совместимый прокси
+        }
+    }
+
+    if (!result || !result.success) return null; // Не подошло ничего
+
+    // Фильтр дата-центров
+    if (isDatacenter(result.data)) return null;
+
+    return finalProxyName;
+}
+
+// Проверка на стоп-слова
+function isDatacenter(data) {
+    const connection = data.connection || {};
+    const isp = (connection.isp || '').toLowerCase();
+    const org = (connection.org || '').toLowerCase();
+    const fullInfo = `${isp} ${org}`;
+    
+    return BLOCK_KEYWORDS.some(word => fullInfo.includes(word));
+}
+
+async function main() {
+    console.log('--- STARTING (Mode: SOCKS5 & HTTPS-Capable) ---');
     const proxies = await fetchProxies();
-    console.log(`Unique proxies found: ${proxies.length}`);
     
     if (proxies.length === 0) {
-        console.log('No proxies found. Check sources.txt');
+        console.log('No proxies found.');
         return;
     }
 
-    // Шаг 2: Проверяем
-    console.log('Checking proxies (this may take time)...');
-    let completed = 0;
+    console.log(`Checking ${proxies.length} candidates...`);
     
+    let completed = 0;
     const checkPromises = proxies.map(p => limit(async () => {
         const res = await checkProxy(p);
         completed++;
@@ -128,11 +170,10 @@ async function main() {
     const results = await Promise.all(checkPromises);
     const valid = results.filter(r => r !== null);
 
-    // Шаг 3: Сохраняем
     fs.writeFileSync(OUTPUT_FILE, valid.join('\n'));
     
     console.log('\n--- DONE ---');
-    console.log(`Valid Residential IPs: ${valid.length}`);
+    console.log(`Valid Proxies: ${valid.length}`);
     console.log(`Saved to: ${OUTPUT_FILE}`);
 }
 
