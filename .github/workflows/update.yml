@@ -1,0 +1,39 @@
+name: Update Proxy List
+
+on:
+  schedule:
+    # Запуск каждый час в 00 минут (например 13:00, 14:00...)
+    - cron: '0 * * * *'
+  # Возможность запустить вручную кнопку (на вкладке Actions)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run Proxy Checker
+      run: npm start
+
+    - name: Commit and Push changes
+      run: |
+        git config --global user.name "GitHub Action"
+        git config --global user.email "action@github.com"
+        git add valid_proxies.txt
+        # Если изменений нет — не падать с ошибкой, а выйти
+        git commit -m "Auto-update proxy list" || exit 0
+        git push
