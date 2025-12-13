@@ -1,5 +1,4 @@
 https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt
-https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/https/data.txt
 https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/socks5.txt
 https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/discord.txt
 https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/facebook.txt
