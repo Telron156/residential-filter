@@ -7,10 +7,10 @@ const { SocksProxyAgent } = require('socks-proxy-agent');
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
 const TIMEOUT = 10000;      // Таймаут проверки (10 сек)
-const PING_TIMEOUT = 4000;  // Таймаут пинга Google (4 сек)
-const THREADS = 100;        // Количество потоков (Для сервера можно 100-200)
+const PING_TIMEOUT = 5000;  // Таймаут пинга (чуть увеличил)
+const THREADS = 50;         // СНИЗИЛ ДО 50 (чтобы не банили API)
 
-// Расширенный список слов-паразитов (Хостинги/Датацентры)
+// Список стоп-слов (Хостинги/Датацентры)
 const BLOCK_KEYWORDS = [
     'cloud', 'host', 'vps', 'amazon', 'aws', 'digitalocean', 
     'google', 'microsoft', 'azure', 'hetzner', 'ovh', 
@@ -20,14 +20,19 @@ const BLOCK_KEYWORDS = [
     'performive', 'gtt', 'cogent'
 ];
 
-const CHECK_URL = 'http://ip-api.com/json';  // Лучшая база ISP
-const PING_URL = 'http://www.google.com';    // Проверка на жизнь
+// Используем ipwho.is (он лояльнее к бесплатным запросам чем ip-api)
+const CHECK_URL = 'https://ipwho.is/'; 
+const PING_URL = 'http://www.google.com';
+
+// Заголовки, чтобы притворяться браузером
+const HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+};
 
 // === 1. ЗАГРУЗКА И ПАРСИНГ ССЫЛОК ===
 async function fetchProxies() {
     if (!fs.existsSync(SOURCES_FILE)) return [];
     
-    // Читаем ссылки из файла
     const urls = fs.readFileSync(SOURCES_FILE, 'utf-8')
         .split('\n')
         .map(l => l.trim())
@@ -36,16 +41,13 @@ async function fetchProxies() {
     console.log(`📡 Loading sources from ${urls.length} links...`);
     const allProxies = new Set();
 
-    const tasks = urls.map(url => axios.get(url, { timeout: 5000 })
+    const tasks = urls.map(url => axios.get(url, { timeout: 8000, headers: HEADERS })
         .then(res => {
             const lines = (typeof res.data === 'string' ? res.data : JSON.stringify(res.data)).split(/\r?\n/);
             lines.forEach(line => {
                 const clean = line.trim();
-                
-                // ЖЕСТКИЙ ФИЛЬТР: Убираем SOCKS4
                 if (clean.toLowerCase().includes('socks4')) return; 
                 
-                // Ищем IP:PORT
                 const match = clean.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)/);
                 if (match) {
                     let ipPort = match[0];
@@ -64,15 +66,21 @@ async function fetchProxies() {
 
 // === 2. ФУНКЦИИ ПРОВЕРКИ ===
 
-// Быстрый Ping (жив или нет)
+// Быстрый Ping
 async function checkAlive(agent) {
     try {
+        // AbortSignal гарантирует, что запрос умрет через 5 сек
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), PING_TIMEOUT);
+
         await axios.get(PING_URL, {
             httpAgent: agent,
             httpsAgent: agent,
-            timeout: PING_TIMEOUT,
+            signal: controller.signal, // Жесткий обрыв
             validateStatus: () => true 
         });
+        
+        clearTimeout(timeoutId);
         return true;
     } catch (e) {
         return false;
@@ -82,22 +90,29 @@ async function checkAlive(agent) {
 // Глубокая проверка (Datacenter или Residential)
 async function checkGeoAndType(agent) {
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), TIMEOUT);
+
         const response = await axios.get(CHECK_URL, {
             httpAgent: agent,
             httpsAgent: agent,
-            timeout: TIMEOUT
+            signal: controller.signal, // Жесткий обрыв
+            headers: HEADERS
         });
         
-        if (response.data && response.data.status === 'success') {
-            const isp = (response.data.isp || '').toLowerCase();
-            const org = (response.data.org || '').toLowerCase();
+        clearTimeout(timeoutId);
+
+        if (response.data && response.data.success) { // ipwho.is возвращает success: true
+            // Для ipwho.is структура connection: { isp: "...", org: "..." }
+            const connection = response.data.connection || {};
+            const isp = (connection.isp || '').toLowerCase();
+            const org = (connection.org || '').toLowerCase();
             const fullInfo = `${isp} ${org}`;
             
-            // Если найдено стоп-слово — это плохой прокси
             if (BLOCK_KEYWORDS.some(word => fullInfo.includes(word))) {
                 return false; 
             }
-            return true; // Это Residential (Хороший)
+            return true; 
         }
     } catch (e) {
         return false;
@@ -105,7 +120,7 @@ async function checkGeoAndType(agent) {
     return false;
 }
 
-// Логика проверки одного прокси
+// Логика проверки
 async function checkProxy(proxyStr) {
     if (proxyStr.includes('socks4')) return null;
 
@@ -116,7 +131,6 @@ async function checkProxy(proxyStr) {
     let finalProxyString = '';
 
     try {
-        // Подбор протокола + Пинг
         if (proxyStr.includes('://')) {
             const agent = proxyStr.startsWith('socks') ? new SocksProxyAgent(proxyStr) : new HttpsProxyAgent(proxyStr);
             if (await checkAlive(agent)) {
@@ -124,7 +138,6 @@ async function checkProxy(proxyStr) {
                 finalProxyString = proxyStr;
             }
         } else {
-            // Если протокол не указан, пробуем SOCKS5, потом HTTP
             const socksUrl = `socks5://${ipPort}`;
             const socksAgent = new SocksProxyAgent(socksUrl);
             if (await checkAlive(socksAgent)) {
@@ -142,7 +155,6 @@ async function checkProxy(proxyStr) {
 
         if (!workingAgent) return null;
 
-        // Проверка на ISP
         const isClean = await checkGeoAndType(workingAgent);
         
         if (isClean) {
@@ -155,7 +167,7 @@ async function checkProxy(proxyStr) {
     return null;
 }
 
-// === 3. УПРАВЛЕНИЕ ПОТОКАМИ (Без p-limit) ===
+// === 3. УПРАВЛЕНИЕ ПОТОКАМИ ===
 async function runWithLimit(items, limit, fn) {
     const results = [];
     const executing = [];
@@ -168,8 +180,7 @@ async function runWithLimit(items, limit, fn) {
         const e = p.then(() => {
             executing.splice(executing.indexOf(e), 1);
             completed++;
-            if (completed % 50 === 0) {
-                // Вывод прогресса в лог Actions
+            if (completed % 20 === 0) {
                 console.log(`Checked: ${completed}/${items.length}`);
             }
         });
@@ -185,24 +196,37 @@ async function runWithLimit(items, limit, fn) {
 // === MAIN ===
 async function main() {
     console.log('--- STARTING GITHUB SCANNER (Residential Only) ---');
-    const proxies = await fetchProxies();
-    
-    if (proxies.length === 0) {
-        console.log('No proxies found in sources.');
-        return;
+    try {
+        const proxies = await fetchProxies();
+        
+        if (proxies.length === 0) {
+            console.log('No proxies found in sources.');
+            return;
+        }
+
+        console.log(`Unique candidates: ${proxies.length}`);
+        console.log(`Starting checkers (${THREADS} threads)...`);
+        
+        // Добавил общий таймаут для всей работы скрипта (25 минут), чтобы GitHub не убивал его ошибкой
+        const scriptTimeout = setTimeout(() => {
+             console.log('⚠️ Global script timeout reached. Saving current results...');
+             process.exit(0);
+        }, 25 * 60 * 1000);
+
+        const results = await runWithLimit(proxies, THREADS, checkProxy);
+        const valid = results.filter(r => r !== null);
+
+        fs.writeFileSync(OUTPUT_FILE, valid.join('\n'));
+        
+        clearTimeout(scriptTimeout);
+        console.log('\n--- DONE ---');
+        console.log(`Valid Resident/Mobile Proxies: ${valid.length}`);
+        console.log(`Saved to: ${OUTPUT_FILE}`);
+        
+    } catch (error) {
+        console.error("FATAL ERROR:", error);
+        process.exit(1);
     }
-
-    console.log(`Unique candidates: ${proxies.length}`);
-    console.log(`Starting checkers (${THREADS} threads)...`);
-    
-    const results = await runWithLimit(proxies, THREADS, checkProxy);
-    const valid = results.filter(r => r !== null);
-
-    fs.writeFileSync(OUTPUT_FILE, valid.join('\n'));
-    
-    console.log('\n--- DONE ---');
-    console.log(`Valid Resident/Mobile Proxies: ${valid.length}`);
-    console.log(`Saved to: ${OUTPUT_FILE}`);
 }
 
 main();
