@@ -7,10 +7,11 @@ const pLimit = require('p-limit');
 // === НАСТРОЙКИ ===
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
-const TIMEOUT = 10000;
-const MAX_LATENCY = 2500;
-const THREADS = 100;
+const TIMEOUT = 10000;      // Таймаут для проверки API (10 сек)
+const PING_TIMEOUT = 4000;  // Таймаут для быстрого пинга (4 сек)
+const THREADS = 100;        // Количество потоков
 
+// Ключевые слова для бана (датацентры)
 const BLOCK_KEYWORDS = [
     'cloud', 'host', 'vps', 'amazon', 'aws', 'digitalocean', 
     'google', 'microsoft', 'azure', 'hetzner', 'ovh', 
@@ -18,11 +19,12 @@ const BLOCK_KEYWORDS = [
     'alibaba', 'oracle', 'linode'
 ];
 
-const CHECK_URL = 'https://ipwho.is/'; 
+const CHECK_URL = 'https://ipwho.is/';       // Проверка ГЕО (Лимитировано!)
+const PING_URL = 'http://www.google.com';    // Быстрая проверка "на жизнь"
 
 const limit = pLimit(THREADS);
 
-// 1. Загрузка и ЖЕСТКАЯ очистка
+// 1. Загрузка и очистка (Убираем SOCKS4)
 async function fetchProxies() {
     if (!fs.existsSync(SOURCES_FILE)) return [];
     
@@ -39,135 +41,148 @@ async function fetchProxies() {
             const lines = (typeof res.data === 'string' ? res.data : JSON.stringify(res.data)).split(/\r?\n/);
             lines.forEach(line => {
                 const clean = line.trim();
+                
+                // === ФИЛЬТР SOCKS4 ===
                 if (clean.toLowerCase().includes('socks4')) return; 
                 
-                // ИСПРАВЛЕНИЕ 1: Регулярка теперь вытаскивает только IP:PORT
-                // Игнорируя всё, что написано после (страны, комментарии)
-                // Находит 1.1.1.1:80 даже если строка "1.1.1.1:80 United States"
+                // Регулярка для поиска IP:PORT
                 const match = clean.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)/);
                 
                 if (match) {
-                    // Если в исходной строке был протокол, пробуем его сохранить
                     let ipPort = match[0];
+                    // Если протокол указан явно — сохраняем
                     if (clean.includes('socks5://')) {
                         allProxies.add(`socks5://${ipPort}`);
                     } else if (clean.includes('https://') || clean.includes('http://')) {
                         allProxies.add(`http://${ipPort}`);
                     } else {
-                        allProxies.add(ipPort); // Просто IP:PORT
+                        // Если голый IP:PORT — добавляем как есть (протокол определим при проверке)
+                        allProxies.add(ipPort); 
                     }
                 }
             });
         })
-        .catch(err => console.log(`Error loading ${url}: ${err.message}`))
+        .catch(err => console.log(`Error loading source: ${err.message}`))
     );
 
     await Promise.all(tasks);
     return Array.from(allProxies);
 }
 
-// Вспомогательная функция запроса
-async function tryRequest(agent) {
-    const start = Date.now();
+// Легкая проверка (Ping) — чтобы не тратить лимиты API на мертвые прокси
+async function checkAlive(agent) {
+    try {
+        await axios.get(PING_URL, {
+            httpAgent: agent,
+            httpsAgent: agent,
+            timeout: PING_TIMEOUT,
+            validateStatus: () => true // Любой статус ответа (200, 404, 403) означает, что прокси жив
+        });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+// Тяжелая проверка (Geo + Datacenter check)
+async function checkGeoAndType(agent) {
     try {
         const response = await axios.get(CHECK_URL, {
             httpAgent: agent,
             httpsAgent: agent,
-            timeout: TIMEOUT,
-            validateStatus: () => true
+            timeout: TIMEOUT
         });
-        const latency = Date.now() - start;
         
-        if (response.status === 200 && response.data && latency <= MAX_LATENCY) {
-            return { success: true, data: response.data };
+        if (response.data && response.data.success) {
+            // Проверка на датацентр
+            const connection = response.data.connection || {};
+            const isp = (connection.isp || '').toLowerCase();
+            const org = (connection.org || '').toLowerCase();
+            const fullInfo = `${isp} ${org}`;
+            
+            if (BLOCK_KEYWORDS.some(word => fullInfo.includes(word))) {
+                return false; // Это датацентр
+            }
+            return true; // Это резидентный/мобильный (хороший)
         }
     } catch (e) {
-        return { success: false };
+        return false;
     }
-    return { success: false };
+    return false;
 }
 
-// 2. Логика проверки
+// 2. Основная логика проверки
 async function checkProxy(proxyStr) {
-    // Подготовка технической строки
-    let technicalUrl = proxyStr;
-    if (!technicalUrl.includes('://')) {
-        technicalUrl = `http://${technicalUrl}`;
-    }
+    // Если каким-то чудом socks4 просочился — убиваем
+    if (proxyStr.includes('socks4')) return null;
 
-    let agent;
-    let finalProxyName = '';
+    let technicalUrl = proxyStr.includes('://') ? proxyStr : `http://${proxyStr}`;
+    let ipPort = technicalUrl.split('://')[1];
+    
+    let workingAgent = null;
+    let finalProxyString = '';
 
-    // ИСПРАВЛЕНИЕ 2: Оборачиваем создание агентов в try-catch,
-    // чтобы кривой URL не ронял весь скрипт
     try {
-        // --- СЦЕНАРИЙ А: Протокол уже указан ---
+        // --- ЭТАП 1: Определение протокола и ПИНГ ---
+        
+        // Сценарий А: Протокол уже был в списке
         if (proxyStr.includes('://')) {
-            if (proxyStr.startsWith('socks5')) {
-                agent = new SocksProxyAgent(proxyStr);
-                const result = await tryRequest(agent);
-                if (result.success && !isDatacenter(result.data)) return proxyStr;
-            } 
-            else if (proxyStr.startsWith('http')) {
-                agent = new HttpsProxyAgent(proxyStr);
-                const result = await tryRequest(agent);
-                if (result.success && !isDatacenter(result.data)) return proxyStr;
-            }
-            return null;
-        }
-
-        // --- СЦЕНАРИЙ Б: Голый IP:PORT ---
-        const ipPort = technicalUrl.split('://')[1];
-        
-        // Попытка 1: SOCKS5
-        const socksUrl = `socks5://${ipPort}`;
-        // ВАЖНО: new SocksProxyAgent может упасть, если url кривой
-        try { agent = new SocksProxyAgent(socksUrl); } catch(e) { return null; }
-        
-        let result = await tryRequest(agent);
-        if (result.success) {
-            finalProxyName = socksUrl;
-        } else {
-            // Попытка 2: HTTPS
-            const httpUrl = `http://${ipPort}`;
-            try { agent = new HttpsProxyAgent(httpUrl); } catch(e) { return null; }
+            const agent = proxyStr.startsWith('socks') 
+                ? new SocksProxyAgent(proxyStr) 
+                : new HttpsProxyAgent(proxyStr);
             
-            result = await tryRequest(agent);
-            if (result.success) {
-                finalProxyName = httpUrl;
+            if (await checkAlive(agent)) {
+                workingAgent = agent;
+                finalProxyString = proxyStr;
+            }
+        } 
+        // Сценарий Б: Голый IP:PORT (Пробуем подобрать)
+        else {
+            // 1. Пробуем как SOCKS5
+            const socksUrl = `socks5://${ipPort}`;
+            const socksAgent = new SocksProxyAgent(socksUrl);
+            if (await checkAlive(socksAgent)) {
+                workingAgent = socksAgent;
+                finalProxyString = socksUrl;
+            } 
+            // 2. Если не вышло — пробуем как HTTP
+            else {
+                const httpUrl = `http://${ipPort}`;
+                const httpAgent = new HttpsProxyAgent(httpUrl);
+                if (await checkAlive(httpAgent)) {
+                    workingAgent = httpAgent;
+                    finalProxyString = httpUrl;
+                }
             }
         }
 
-        if (!result || !result.success) return null;
-        if (isDatacenter(result.data)) return null;
+        // Если пинг не прошел ни по одному протоколу — выходим
+        if (!workingAgent) return null;
 
-        return finalProxyName;
+        // --- ЭТАП 2: Проверка на Датацентр (Тяжелый запрос) ---
+        const isClean = await checkGeoAndType(workingAgent);
+        
+        if (isClean) {
+            return finalProxyString;
+        }
 
     } catch (globalError) {
-        // Если что-то пошло совсем не так с этим конкретным прокси — просто пропускаем его
         return null;
     }
-}
-
-function isDatacenter(data) {
-    const connection = data.connection || {};
-    const isp = (connection.isp || '').toLowerCase();
-    const org = (connection.org || '').toLowerCase();
-    const fullInfo = `${isp} ${org}`;
-    
-    return BLOCK_KEYWORDS.some(word => fullInfo.includes(word));
+    return null;
 }
 
 async function main() {
-    console.log('--- STARTING (Mode: Robust SOCKS5 & HTTPS) ---');
+    console.log('--- STARTING (NO SOCKS4 | Smart Check) ---');
     const proxies = await fetchProxies();
     
     if (proxies.length === 0) {
-        console.log('No proxies found.');
+        console.log('No proxies found in sources.');
         return;
     }
 
-    console.log(`Checking ${proxies.length} candidates...`);
+    console.log(`Unique candidates: ${proxies.length}`);
+    console.log(`Starting checkers (${THREADS} threads)...`);
     
     let completed = 0;
     const checkPromises = proxies.map(p => limit(async () => {
@@ -183,7 +198,7 @@ async function main() {
     fs.writeFileSync(OUTPUT_FILE, valid.join('\n'));
     
     console.log('\n--- DONE ---');
-    console.log(`Valid Proxies: ${valid.length}`);
+    console.log(`Valid Resident/Mobile Proxies: ${valid.length}`);
     console.log(`Saved to: ${OUTPUT_FILE}`);
 }
 
