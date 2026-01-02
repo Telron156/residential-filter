@@ -1,5 +1,2 @@
 https://raw.githubusercontent.com/Skillter/ProxyGather/refs/heads/master/proxies/working-proxies-all.txt
 https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt
-https://raw.githubusercontent.com/ClearProxy/checked-proxy-list/main/socks5/raw/all.txt
-https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt
-https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt
