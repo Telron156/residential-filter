@@ -11,7 +11,7 @@ const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
 
 const THREADS = 25;           
-const TIMEOUT_MS = 12000;     // Чуть увеличил таймаут для стабильности
+const TIMEOUT_MS = 10000;     // Чуть увеличил таймаут для стабильности
 const MAX_LATENCY_MS = 9000;
 
 // ИСПОЛЬЗУЕМ ipwho.is (Он лояльнее к бесплатным запросам, чем ip-api)
