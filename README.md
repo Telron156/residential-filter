@@ -1,8 +1,8 @@
-# Proxy Scraper & Residential Filter
+# Residential Filter
 
-Automated proxy scraper and checker.
+Automated IP address scraper and checker.
 
-1. **Scrapes** proxy lists from URLs provided in `sources.txt`.
+1. **Scrapes** IP lists from URLs provided in `sources.txt`.
 2. **Validates** their availability.
 3. **Filters** by latency (< 2500ms).
 4. **Removes Datacenter IPs** (AWS, Google Cloud, Azure, DigitalOcean, etc.), retaining only "residential-like" addresses.
@@ -14,4 +14,5 @@ Automated proxy scraper and checker.
 3. Run the following commands in the project folder:
    ```bash
    npm install
-   npm startnpm start
+   npm start
+
