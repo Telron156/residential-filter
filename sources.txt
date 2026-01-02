@@ -1,5 +1,14 @@
-https://raw.githubusercontent.com/Skillter/ProxyGather/refs/heads/master/proxies/working-proxies-all.txt
 https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt
+https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/socks5.txt
+https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/discord.txt
+https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/facebook.txt
+https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/google.txt
+https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/instagram.txt
+https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/microsoft.txt
+https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/tiktok.txt
+https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/twitter.txt
+https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/whatsapp.txt
+https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/youtube.txt
 https://raw.githubusercontent.com/ClearProxy/checked-proxy-list/main/socks5/raw/all.txt
-https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt
-https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt
+https://raw.githubusercontent.com/Skillter/ProxyGather/refs/heads/master/proxies/working-proxies-all.txt
+https://raw.githubusercontent.com/themiralay/Proxy-List-World/master/data.txt
