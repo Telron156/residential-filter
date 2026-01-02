@@ -22,7 +22,10 @@ jobs:
         node-version: '18'
 
     - name: Install dependencies
-      run: npm install
+      # Знак | позволяет писать несколько команд подряд
+      run: |
+        npm install
+        npm install http-proxy-agent
 
     - name: Run Proxy Checker
       run: npm start
