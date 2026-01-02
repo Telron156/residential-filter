@@ -19,12 +19,7 @@ const CHECK_URL = 'http://ipwho.is/';
 
 // Стоп-слова (Датацентры)
 const BLACKLIST_KEYWORDS = [
-    'hosting', 'cloud', 'datacenter', 'vps', 'server', 'ovh', 'hetzner',
-    'digitalocean', 'amazon', 'aws', 'google', 'microsoft', 'azure', 'oracle',
-    'alibaba', 'tencent', 'linode', 'vultr', 'lease', 'm247', 'dedi',
-    'fly.io', 'contabo', 'godaddy', 'aceville', 'waicore', 'cdn',
-    'performive', 'gtt', 'cogent', 'choopa', 'solutions', 'host',
-    'onion', 'tor', 'stiftung', 'emerald', 'anonymizer', 'vpn'
+   'tor', 'vpn'
 ];
 
 // Глобальная переменная для хранения результатов в реальном времени
