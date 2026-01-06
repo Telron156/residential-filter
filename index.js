@@ -6,15 +6,15 @@ const { HttpProxyAgent } = require('http-proxy-agent');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 
-// ===================== НАСТРОЙКИ =====================
+// ===================== НАСТРОЙКИ (BALANCED EDITION) =====================
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
 
-// Таймаут пожестче (6 сек), так как Яндекс должен открываться быстро
-const TIMEOUT_MS = 6000; 
+// Даем чуть больше времени на коннект, так как капча может грузиться дольше
+const TIMEOUT_MS = 8000; 
 const THREADS = 50;
 
-// Черный список провайдеров (Дата-центры)
+// Фильтр хостингов ОБЯЗАТЕЛЕН (иначе Метрика спишет визиты)
 const BAD_WORDS = [
   'hosting', 'cloud', 'datacenter', 'vps', 'server', 'ovh', 'hetzner',
   'digitalocean', 'amazon', 'aws', 'google', 'microsoft', 'azure', 'oracle',
@@ -25,28 +25,25 @@ const BAD_WORDS = [
 let VALID_PROXIES_CACHE = [];
 const sourceLoader = axios.create({ timeout: 15000 });
 
-// AXIOS (Маскировка под браузер Chrome)
+// AXIOS (Маскировка под браузер)
 const http = axios.create({
-    validateStatus: () => true,
+    validateStatus: () => true, // Принимаем любой статус, главное чтобы ответил
     proxy: false,
     headers: { 
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Cache-Control': 'no-cache',
-        'Upgrade-Insecure-Requests': '1'
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
     }
 });
 
-// ===================== СОХРАНЕНИЕ =====================
 function saveAndExit() {
     console.log('\n💾 СОХРАНЕНИЕ...');
     if (VALID_PROXIES_CACHE.length > 0) {
         const unique = [...new Set(VALID_PROXIES_CACHE)];
         fs.writeFileSync(OUTPUT_FILE, unique.join('\n'));
-        console.log(`✅ Найдено чистых прокси: ${unique.length}`);
+        console.log(`✅ Найдено рабочих прокси: ${unique.length}`);
     } else {
-        console.log('⚠️ Нет прокси, прошедших фильтр Яндекса.');
+        console.log('⚠️ Нет рабочих прокси.');
     }
     process.exit(0);
 }
@@ -54,7 +51,6 @@ function saveAndExit() {
 process.on('SIGINT', saveAndExit);
 process.on('SIGTERM', saveAndExit);
 
-// ===================== АГЕНТЫ =====================
 function buildAgents(proxyUrl) {
     try {
         const u = new URL(proxyUrl);
@@ -62,7 +58,6 @@ function buildAgents(proxyUrl) {
         const opts = { keepAlive: false };
 
         if (protocol.startsWith('socks')) {
-            // resolveProxy: true - скрывает DNS сервера Гитхаба от Яндекса
             const agent = new SocksProxyAgent(proxyUrl, { ...opts, resolveProxy: true });
             return { http: agent, https: agent, cleanup: () => {} };
         }
@@ -72,8 +67,6 @@ function buildAgents(proxyUrl) {
         return { http: h, https: hs, cleanup: () => { h.destroy(); hs.destroy(); } };
     } catch { return null; }
 }
-
-// ===================== ЯДРО ПРОВЕРКИ =====================
 
 async function checkWithProtocol(host, port, protocol) {
     const proxyUrl = `${protocol}://${host}:${port}`;
@@ -86,7 +79,9 @@ async function checkWithProtocol(host, port, protocol) {
     try {
         const start = Date.now();
         
-        // ШАГ 1: ЗАПРОС К YA.RU
+        // Стучимся на ya.ru, но НЕ ПАРСИМ КАПЧУ.
+        // Нам важен сам факт, что прокси достучался до сервера Яндекса.
+        // Если статус 200 (даже с капчей) или 403 (иногда) - значит IP живой.
         const res = await http.get('https://ya.ru', {
             httpAgent: agents.http,
             httpsAgent: agents.https,
@@ -94,20 +89,10 @@ async function checkWithProtocol(host, port, protocol) {
         });
 
         const latency = Date.now() - start;
-
-        // ШАГ 2: АНАЛИЗ ОТВЕТА НА КАПЧУ
-        // Яндекс часто отдает 200 OK, но внутри HTML лежит капча
-        if (res.status !== 200) throw new Error(`Status ${res.status}`);
         
-        const body = typeof res.data === 'string' ? res.data : '';
-        // Ключевые слова капчи Яндекса
-        if (body.includes('showcaptcha') || 
-            body.includes('smart-captcha') || 
-            body.includes('checkbox-captcha')) {
-            throw new Error('YANDEX_CAPTCHA');
-        }
-
+        // Главное, что ответил. Если таймаут - вылетит в catch.
         return { protocol, latency, agents };
+
     } catch (e) {
         if (agents.cleanup) agents.cleanup();
         throw e;
@@ -125,23 +110,20 @@ async function checkResidential(rawLine) {
     const port = parts.pop();
     const host = parts.join(':');
 
-    // Кандидаты (Гонка протоколов)
     let candidates = ['http', 'socks5'];
     if (rawLine.startsWith('socks')) candidates = ['socks5'];
     else if (rawLine.startsWith('http')) candidates = ['http'];
 
     let winner = null;
-    
-    // Пытаемся подключиться к ya.ru через разные протоколы
     try {
         winner = await Promise.any(candidates.map(p => checkWithProtocol(host, port, p)));
     } catch { return; }
 
     const { protocol, latency, agents } = winner;
 
-    // ШАГ 3: ФИЛЬТР "РОБОТНОСТИ" (Хостинги)
+    // ПРОВЕРКА НА ХОСТИНГ (Оставляем!)
+    // Это единственный критичный фильтр для Метрики.
     try {
-        // Используем того же агента для проверки IP
         const infoRes = await http.get('http://ip-api.com/json/?fields=status,countryCode,isp,org,proxy,hosting', {
             httpAgent: agents.http,
             httpsAgent: agents.https,
@@ -154,14 +136,13 @@ async function checkResidential(rawLine) {
         const isp = String(data.isp || '');
         const org = String(data.org || '');
         
-        // Отсекаем серверные IP (они бесполезны для Метрики)
         const isHosting = data.hosting === true || 
                           BAD_WORDS.some(w => isp.toLowerCase().includes(w) || org.toLowerCase().includes(w));
 
         if (isHosting) return;
 
         const icon = latency < 1500 ? '🚀' : '🐢';
-        console.log(`✅ YA.RU CLEAN | ${data.countryCode} | ${icon} ${latency}ms | ${isp} [${protocol.toUpperCase()}]`);
+        console.log(`✅ YA.RU ALIVE | ${data.countryCode} | ${icon} ${latency}ms | ${isp} [${protocol.toUpperCase()}]`);
         
         VALID_PROXIES_CACHE.push(`${protocol}://${host}:${port}`);
 
@@ -169,7 +150,6 @@ async function checkResidential(rawLine) {
     finally { if (agents.cleanup) agents.cleanup(); }
 }
 
-// ===================== ЗАГРУЗКА И ВОРКЕРЫ =====================
 async function mapWithConcurrency(items, concurrency, workerFn) {
     const results = [];
     let idx = 0;
@@ -203,20 +183,14 @@ async function loadSources() {
     return Array.from(all);
 }
 
-// ===================== MAIN =====================
 async function main() {
-    console.log('--- YANDEX GATEKEEPER CHECKER (v7.0) ---\n');
-    
+    console.log('--- YANDEX BALANCED CHECKER (v8.0) ---\n');
     const raw = await loadSources();
     if(raw.length===0) return;
-    
     const unique = [...new Set(raw)];
     console.log(`📥 Candidates: ${unique.length} | Threads: ${THREADS}`);
-
     const t = setTimeout(() => { console.log('TIMEOUT'); saveAndExit(); }, 45*60000);
-
     await mapWithConcurrency(unique, THREADS, checkResidential);
-
     clearTimeout(t);
     saveAndExit();
 }
