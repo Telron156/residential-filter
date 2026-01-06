@@ -10,257 +10,215 @@ const { SocksProxyAgent } = require('socks-proxy-agent');
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
 
-const THREADS = 25;           
-const TIMEOUT_MS = 10000;     // Чуть увеличил таймаут для стабильности
-const MAX_LATENCY_MS = 9000;
+// Таймаут пожестче (6 сек), так как Яндекс должен открываться быстро
+const TIMEOUT_MS = 6000; 
+const THREADS = 50;
 
-// ИСПОЛЬЗУЕМ ipwho.is (Он лояльнее к бесплатным запросам, чем ip-api)
-const CHECK_URL = 'http://ipwho.is/';
-
-// Стоп-слова (Датацентры)
-const BLACKLIST_KEYWORDS = [
-   'tor', 'vpn'
+// Черный список провайдеров (Дата-центры)
+const BAD_WORDS = [
+  'hosting', 'cloud', 'datacenter', 'vps', 'server', 'ovh', 'hetzner',
+  'digitalocean', 'amazon', 'aws', 'google', 'microsoft', 'azure', 'oracle',
+  'alibaba', 'tencent', 'linode', 'vultr', 'm247', 'choopa', 'tor', 'vpn',
+  'dedicated', 'leaseweb', 'clouvider', 'cogent', 'gtt', 'ipxo'
 ];
 
-// Глобальная переменная для хранения результатов в реальном времени
 let VALID_PROXIES_CACHE = [];
-
-// Axios для скачивания источников
 const sourceLoader = axios.create({ timeout: 15000 });
 
-// Axios для проверки (User-Agent важен, чтобы не блокировали)
-const checkerAxios = axios.create({
-    timeout: TIMEOUT_MS,
-    validateStatus: () => true, 
+// AXIOS (Маскировка под браузер Chrome)
+const http = axios.create({
+    validateStatus: () => true,
     proxy: false,
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+    headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Cache-Control': 'no-cache',
+        'Upgrade-Insecure-Requests': '1'
+    }
 });
 
-// ===================== ФУНКЦИЯ СОХРАНЕНИЯ =====================
+// ===================== СОХРАНЕНИЕ =====================
 function saveAndExit() {
-    console.log('\n💾 ЭКСТРЕННОЕ СОХРАНЕНИЕ...');
+    console.log('\n💾 СОХРАНЕНИЕ...');
     if (VALID_PROXIES_CACHE.length > 0) {
-        // Сохраняем только живые на данный момент
-        fs.writeFileSync(OUTPUT_FILE, VALID_PROXIES_CACHE.join('\n'));
-        console.log(`✅ Успешно сохранено ${VALID_PROXIES_CACHE.length} прокси в ${OUTPUT_FILE}`);
+        const unique = [...new Set(VALID_PROXIES_CACHE)];
+        fs.writeFileSync(OUTPUT_FILE, unique.join('\n'));
+        console.log(`✅ Найдено чистых прокси: ${unique.length}`);
     } else {
-        console.log('⚠️ Нет валидных прокси для сохранения.');
+        console.log('⚠️ Нет прокси, прошедших фильтр Яндекса.');
     }
     process.exit(0);
 }
 
-// Перехват сигналов остановки (если GitHub отменит задачу)
 process.on('SIGINT', saveAndExit);
 process.on('SIGTERM', saveAndExit);
 
-// ===================== УТИЛИТЫ =====================
-
-function normalizeProxyLine(line) {
-    const raw = (line || '').trim();
-    if (!raw || raw.length < 5) return null;
-    if (raw.startsWith('#') || raw.startsWith('//')) return null;
-    if (raw.toLowerCase().includes('socks4')) return null;
-
-    // 1. Очистка от протоколов для анализа порта
-    let clean = raw.replace(/^(http|https|socks5|socks5h):\/\//, '');
-    let protocol = 'http'; // Дефолт, если порт не подскажет иное
-
-    // Если в исходной строке явно был socks5 — сохраняем это намерение,
-    // но если порт 1080, то мы все равно форсируем socks5 ниже.
-    if (raw.startsWith('socks5')) protocol = 'socks5';
-
-    // 2. АВТО-ОПРЕДЕЛЕНИЕ ПО ПОРТУ (Самое важное!)
-    try {
-        // Пытаемся распарсить как URL, чтобы точно достать порт
-        // Добавляем http:// просто для парсера
-        const uHelper = new URL(`http://${clean}`);
-        const port = parseInt(uHelper.port, 10);
-
-        // Магические порты SOCKS
-        if ([1080, 1081, 9050, 9999].includes(port)) {
-            protocol = 'socks5';
-        }
-    } catch (e) {
-        // Если парсинг не удался, пропускаем строку
-        return null;
-    }
-
-    const withScheme = `${protocol}://${clean}`;
-
-    try {
-        const u = new URL(withScheme);
-        if (!u.hostname || !u.port) return null;
-        
-        // Поддерживаем только эти протоколы
-        u.protocol = u.protocol.toLowerCase();
-        if (!['http:', 'https:', 'socks5:', 'socks5h:'].includes(u.protocol)) return null;
-        
-        return u.toString().replace(/\/$/, '');
-    } catch {
-        return null;
-    }
-}
-
+// ===================== АГЕНТЫ =====================
 function buildAgents(proxyUrl) {
     try {
         const u = new URL(proxyUrl);
         const protocol = u.protocol.replace(':', '');
-        const opts = { keepAlive: false, timeout: TIMEOUT_MS };
+        const opts = { keepAlive: false };
 
         if (protocol.startsWith('socks')) {
-            const agent = new SocksProxyAgent(proxyUrl, opts);
+            // resolveProxy: true - скрывает DNS сервера Гитхаба от Яндекса
+            const agent = new SocksProxyAgent(proxyUrl, { ...opts, resolveProxy: true });
             return { http: agent, https: agent, cleanup: () => {} };
         }
-        if (protocol === 'http') {
-            const httpAgent = new HttpProxyAgent(proxyUrl, opts);
-            const httpsAgent = new HttpsProxyAgent(proxyUrl, opts);
-            return { 
-                http: httpAgent, 
-                https: httpsAgent, 
-                cleanup: () => { httpAgent.destroy(); httpsAgent.destroy(); } 
-            };
-        }
-        if (protocol === 'https') {
-            const agent = new HttpsProxyAgent(proxyUrl, opts);
-            return { http: agent, https: agent, cleanup: () => agent.destroy() };
-        }
-    } catch (e) { return null; }
-    return null;
+        
+        const h = new HttpProxyAgent(proxyUrl, opts);
+        const hs = new HttpsProxyAgent(proxyUrl, opts);
+        return { http: h, https: hs, cleanup: () => { h.destroy(); hs.destroy(); } };
+    } catch { return null; }
 }
 
-// ===================== ЛОГИКА ПРОВЕРКИ =====================
+// ===================== ЯДРО ПРОВЕРКИ =====================
 
-async function checkResidential(proxyUrl) {
+async function checkWithProtocol(host, port, protocol) {
+    const proxyUrl = `${protocol}://${host}:${port}`;
     const agents = buildAgents(proxyUrl);
-    if (!agents) return null;
+    if (!agents) throw new Error('Agent Fail');
 
-    const start = Date.now();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
     try {
-        const res = await checkerAxios.get(CHECK_URL, {
+        const start = Date.now();
+        
+        // ШАГ 1: ЗАПРОС К YA.RU
+        const res = await http.get('https://ya.ru', {
             httpAgent: agents.http,
-            httpsAgent: agents.https
+            httpsAgent: agents.https,
+            signal: controller.signal
         });
 
         const latency = Date.now() - start;
 
-        if (latency > MAX_LATENCY_MS) return null;
-        if (res.status !== 200) return null;
-
-        // Обработка ответа ipwho.is
-        const data = res.data || {};
+        // ШАГ 2: АНАЛИЗ ОТВЕТА НА КАПЧУ
+        // Яндекс часто отдает 200 OK, но внутри HTML лежит капча
+        if (res.status !== 200) throw new Error(`Status ${res.status}`);
         
-        // ipwho.is возвращает success: true/false
-        if (!data.success) return null;
+        const body = typeof res.data === 'string' ? res.data : '';
+        // Ключевые слова капчи Яндекса
+        if (body.includes('showcaptcha') || 
+            body.includes('smart-captcha') || 
+            body.includes('checkbox-captcha')) {
+            throw new Error('YANDEX_CAPTCHA');
+        }
 
-        // Данные соединения
-        const connection = data.connection || {};
-        const isp = String(connection.isp || '');
-        const org = String(connection.org || '');
-        const country = String(data.country_code || '??');
-        
-        // Проверка: Это жилой IP?
-        const fullInfo = `${isp} ${org}`.toLowerCase();
-        if (BLACKLIST_KEYWORDS.some(w => fullInfo.includes(w))) return null;
-
-        // УСПЕХ
-        const icon = latency < 1500 ? '🚀' : '🐢';
-        console.log(`✅ RESIDENTIAL | ${country} | ${icon} ${latency}ms | ${isp}`);
-        
-        // Добавляем в глобальный кэш
-        VALID_PROXIES_CACHE.push(proxyUrl);
-        
-        return proxyUrl;
-
+        return { protocol, latency, agents };
     } catch (e) {
-        return null;
-    } finally {
         if (agents.cleanup) agents.cleanup();
+        throw e;
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
 
-// ===================== WORKER POOL =====================
+async function checkResidential(rawLine) {
+    const clean = rawLine.replace(/^(http|https|socks4|socks5|socks5h):\/\//, '').trim();
+    if (!clean || clean.length < 5) return;
+
+    const parts = clean.split(':');
+    if (parts.length < 2) return;
+    const port = parts.pop();
+    const host = parts.join(':');
+
+    // Кандидаты (Гонка протоколов)
+    let candidates = ['http', 'socks5'];
+    if (rawLine.startsWith('socks')) candidates = ['socks5'];
+    else if (rawLine.startsWith('http')) candidates = ['http'];
+
+    let winner = null;
+    
+    // Пытаемся подключиться к ya.ru через разные протоколы
+    try {
+        winner = await Promise.any(candidates.map(p => checkWithProtocol(host, port, p)));
+    } catch { return; }
+
+    const { protocol, latency, agents } = winner;
+
+    // ШАГ 3: ФИЛЬТР "РОБОТНОСТИ" (Хостинги)
+    try {
+        // Используем того же агента для проверки IP
+        const infoRes = await http.get('http://ip-api.com/json/?fields=status,countryCode,isp,org,proxy,hosting', {
+            httpAgent: agents.http,
+            httpsAgent: agents.https,
+            timeout: 5000
+        });
+
+        const data = infoRes.data || {};
+        if (data.status !== 'success') return;
+
+        const isp = String(data.isp || '');
+        const org = String(data.org || '');
+        
+        // Отсекаем серверные IP (они бесполезны для Метрики)
+        const isHosting = data.hosting === true || 
+                          BAD_WORDS.some(w => isp.toLowerCase().includes(w) || org.toLowerCase().includes(w));
+
+        if (isHosting) return;
+
+        const icon = latency < 1500 ? '🚀' : '🐢';
+        console.log(`✅ YA.RU CLEAN | ${data.countryCode} | ${icon} ${latency}ms | ${isp} [${protocol.toUpperCase()}]`);
+        
+        VALID_PROXIES_CACHE.push(`${protocol}://${host}:${port}`);
+
+    } catch (e) { return; } 
+    finally { if (agents.cleanup) agents.cleanup(); }
+}
+
+// ===================== ЗАГРУЗКА И ВОРКЕРЫ =====================
 async function mapWithConcurrency(items, concurrency, workerFn) {
     const results = [];
     let idx = 0;
-
     const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
         while (idx < items.length) {
-            const i = idx++; 
-            const result = await workerFn(items[i]);
-            if (result) results.push(result);
+            const i = idx++;
+            await workerFn(items[i]);
         }
     });
-
     await Promise.all(workers);
-    return results;
-}
-
-// ===================== MAIN =====================
-async function main() {
-    console.log('--- HYBRID PROXY CHECKER (v2.0: Auto-Protocol) ---\n');
-
-    // 1. Load Sources
-    const rawProxies = await loadSources();
-    if (rawProxies.length === 0) {
-        console.log('❌ Sources empty.');
-        return;
-    }
-
-    const normalized = rawProxies.map(normalizeProxyLine).filter(Boolean);
-    const unique = [...new Set(normalized)];
-
-    console.log(`📥 Total Unique (Auto-Fixed): ${unique.length}`);
-    console.log(`🚀 Starting threads: ${THREADS}`);
-    
-    // ПРЕДОХРАНИТЕЛЬ: 20 минут
-    const scriptTimeout = setTimeout(() => {
-         console.log('⚠️ Global timeout reached!');
-         saveAndExit();
-    }, 20 * 60 * 1000);
-
-    await mapWithConcurrency(unique, THREADS, checkResidential);
-
-    clearTimeout(scriptTimeout);
-    
-    saveAndExit();
 }
 
 async function loadSources() {
     if (!fs.existsSync(SOURCES_FILE)) return [];
-    
-    const urls = fs.readFileSync(SOURCES_FILE, 'utf-8')
-        .split('\n').map(l => l.trim()).filter(l => l.length > 4 && !l.startsWith('#'));
-
-    console.log(`📡 Downloading from ${urls.length} links...`);
-    const allProxies = new Set();
-
-    const tasks = urls.map(url => sourceLoader.get(url)
-        .then(res => {
-            const text = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
-            const lines = text.split(/\r?\n/);
-            lines.forEach(line => {
-                const match = line.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)/);
-                if (match) {
-                    let fullLine = match[0];
-                    // Если в исходной строке уже был протокол — сохраняем его
-                    if (line.includes('socks5://')) fullLine = 'socks5://' + match[0];
-                    else if (line.includes('http://')) fullLine = 'http://' + match[0];
-                    
-                    // Функция normalizeProxyLine потом все равно проверит порт
-                    // и исправит http://...:1080 на socks5://...:1080
-                    allProxies.add(fullLine);
-                }
-            });
-        })
-        .catch(err => console.log(`⚠️ Source error: ${err.message}`))
-    );
-
+    const urls = fs.readFileSync(SOURCES_FILE, 'utf-8').split('\n').map(l=>l.trim()).filter(l=>l.length>4 && !l.startsWith('#'));
+    console.log(`📡 Sources: ${urls.length}`);
+    const all = new Set();
+    const tasks = urls.map(url => sourceLoader.get(url).then(r => {
+        const txt = typeof r.data==='string'?r.data:JSON.stringify(r.data);
+        txt.split(/\r?\n/).forEach(l => {
+            const m = l.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)/);
+            if(m) {
+                let p = m[0];
+                if(l.includes('socks5://')) p = 'socks5://'+m[0];
+                else if(l.includes('http://')) p = '<http://'+m>[0];
+                all.add(p);
+            }
+        });
+    }).catch(()=>{}));
     await Promise.all(tasks);
-    return Array.from(allProxies);
+    return Array.from(all);
 }
 
-main().catch(err => {
-    console.error('FATAL:', err);
-    process.exit(1);
-});
+// ===================== MAIN =====================
+async function main() {
+    console.log('--- YANDEX GATEKEEPER CHECKER (v7.0) ---\n');
+    
+    const raw = await loadSources();
+    if(raw.length===0) return;
+    
+    const unique = [...new Set(raw)];
+    console.log(`📥 Candidates: ${unique.length} | Threads: ${THREADS}`);
+
+    const t = setTimeout(() => { console.log('TIMEOUT'); saveAndExit(); }, 45*60000);
+
+    await mapWithConcurrency(unique, THREADS, checkResidential);
+
+    clearTimeout(t);
+    saveAndExit();
+}
+
+main().catch(e => process.exit(1));
