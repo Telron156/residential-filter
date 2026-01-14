@@ -8,13 +8,14 @@ const { SocksProxyAgent } = require('socks-proxy-agent');
 
 // ===================== НАСТРОЙКИ (BALANCED EDITION) =====================
 const SOURCES_FILE = 'sources.txt';
-const OUTPUT_FILE = 'valid_proxies.txt';
+const OUTPUT_FILE = 'valid_proxies.txt';       // Общий список
+const OUTPUT_FILE_RU = 'valid_proxies_ru.txt'; // Отдельный файл для RU
 
-// Даем чуть больше времени на коннект, так как капча может грузиться дольше
+// Даем чуть больше времени на коннект
 const TIMEOUT_MS = 8000; 
 const THREADS = 50;
 
-// Фильтр хостингов ОБЯЗАТЕЛЕН (иначе Метрика спишет визиты)
+// Фильтр хостингов (для чистоты резидентных IP)
 const BAD_WORDS = [
   'hosting', 'cloud', 'datacenter', 'vps', 'server', 'ovh', 'hetzner',
   'digitalocean', 'amazon', 'aws', 'google', 'microsoft', 'azure', 'oracle',
@@ -23,11 +24,12 @@ const BAD_WORDS = [
 ];
 
 let VALID_PROXIES_CACHE = [];
+let VALID_PROXIES_RU_CACHE = []; // Кеш для RU прокси
 const sourceLoader = axios.create({ timeout: 15000 });
 
 // AXIOS (Маскировка под браузер)
 const http = axios.create({
-    validateStatus: () => true, // Принимаем любой статус, главное чтобы ответил
+    validateStatus: () => true,
     proxy: false,
     headers: { 
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -38,13 +40,25 @@ const http = axios.create({
 
 function saveAndExit() {
     console.log('\n💾 СОХРАНЕНИЕ...');
+    
+    // 1. Сохраняем общий список
     if (VALID_PROXIES_CACHE.length > 0) {
         const unique = [...new Set(VALID_PROXIES_CACHE)];
         fs.writeFileSync(OUTPUT_FILE, unique.join('\n'));
-        console.log(`✅ Найдено рабочих прокси: ${unique.length}`);
+        console.log(`✅ [ALL] Всего рабочих прокси: ${unique.length}`);
     } else {
-        console.log('⚠️ Нет рабочих прокси.');
+        console.log('⚠️ [ALL] Нет рабочих прокси.');
     }
+
+    // 2. Сохраняем RU список
+    if (VALID_PROXIES_RU_CACHE.length > 0) {
+        const uniqueRu = [...new Set(VALID_PROXIES_RU_CACHE)];
+        fs.writeFileSync(OUTPUT_FILE_RU, uniqueRu.join('\n'));
+        console.log(`🇷🇺 [RU]  Из них русские: ${uniqueRu.length}`);
+    } else {
+        console.log('⚠️ [RU]  Нет русских прокси.');
+    }
+
     process.exit(0);
 }
 
@@ -79,9 +93,7 @@ async function checkWithProtocol(host, port, protocol) {
     try {
         const start = Date.now();
         
-        // Стучимся на ya.ru, но НЕ ПАРСИМ КАПЧУ.
-        // Нам важен сам факт, что прокси достучался до сервера Яндекса.
-        // Если статус 200 (даже с капчей) или 403 (иногда) - значит IP живой.
+        // Стучимся на ya.ru (проверка доступности Яндекса)
         const res = await http.get('https://ya.ru', {
             httpAgent: agents.http,
             httpsAgent: agents.https,
@@ -89,8 +101,6 @@ async function checkWithProtocol(host, port, protocol) {
         });
 
         const latency = Date.now() - start;
-        
-        // Главное, что ответил. Если таймаут - вылетит в catch.
         return { protocol, latency, agents };
 
     } catch (e) {
@@ -121,8 +131,7 @@ async function checkResidential(rawLine) {
 
     const { protocol, latency, agents } = winner;
 
-    // ПРОВЕРКА НА ХОСТИНГ (Оставляем!)
-    // Это единственный критичный фильтр для Метрики.
+    // ПРОВЕРКА НА ХОСТИНГ И ГЕО
     try {
         const infoRes = await http.get('http://ip-api.com/json/?fields=status,countryCode,isp,org,proxy,hosting', {
             httpAgent: agents.http,
@@ -136,15 +145,29 @@ async function checkResidential(rawLine) {
         const isp = String(data.isp || '');
         const org = String(data.org || '');
         
+        // Фильтр дата-центров
         const isHosting = data.hosting === true || 
                           BAD_WORDS.some(w => isp.toLowerCase().includes(w) || org.toLowerCase().includes(w));
 
         if (isHosting) return;
 
+        // Определяем, Россия это или нет
+        const isRu = data.countryCode === 'RU';
         const icon = latency < 1500 ? '🚀' : '🐢';
-        console.log(`✅ YA.RU ALIVE | ${data.countryCode} | ${icon} ${latency}ms | ${isp} [${protocol.toUpperCase()}]`);
+        // Визуально выделяем RU флаг
+        const flag = isRu ? '🇷🇺 RUSSIA' : data.countryCode; 
         
-        VALID_PROXIES_CACHE.push(`${protocol}://${host}:${port}`);
+        console.log(`✅ YA.RU ALIVE | ${flag} | ${icon} ${latency}ms | ${isp} [${protocol.toUpperCase()}]`);
+        
+        const validProxy = `${protocol}://${host}:${port}`;
+        
+        // Добавляем в основной список
+        VALID_PROXIES_CACHE.push(validProxy);
+
+        // Добавляем в RU список, если совпало гео
+        if (isRu) {
+            VALID_PROXIES_RU_CACHE.push(validProxy);
+        }
 
     } catch (e) { return; } 
     finally { if (agents.cleanup) agents.cleanup(); }
@@ -174,7 +197,7 @@ async function loadSources() {
             if(m) {
                 let p = m[0];
                 if(l.includes('socks5://')) p = 'socks5://'+m[0];
-                else if(l.includes('http://')) p = '<http://'+m>[0];
+                else if(l.includes('http://')) p = 'http://'+m[0]; // Исправлена опечатка оригинала
                 all.add(p);
             }
         });
@@ -184,13 +207,17 @@ async function loadSources() {
 }
 
 async function main() {
-    console.log('--- YANDEX BALANCED CHECKER (v8.0) ---\n');
+    console.log('--- YANDEX RESIDENTIAL FILTER (Dual Output) ---\n');
     const raw = await loadSources();
     if(raw.length===0) return;
     const unique = [...new Set(raw)];
     console.log(`📥 Candidates: ${unique.length} | Threads: ${THREADS}`);
+    
+    // Тайм-аут всего скрипта (45 минут)
     const t = setTimeout(() => { console.log('TIMEOUT'); saveAndExit(); }, 45*60000);
+    
     await mapWithConcurrency(unique, THREADS, checkResidential);
+    
     clearTimeout(t);
     saveAndExit();
 }
