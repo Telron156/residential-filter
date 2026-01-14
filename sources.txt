@@ -1,14 +1,35 @@
-https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt
-https://raw.githubusercontent.com/zloi-user/hideip.me/refs/heads/master/socks5.txt
-https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/discord.txt
-https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/facebook.txt
-https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/google.txt
-https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/instagram.txt
-https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/microsoft.txt
-https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/tiktok.txt
-https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/twitter.txt
-https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/whatsapp.txt
-https://raw.githubusercontent.com/Vann-Dev/proxy-list/refs/heads/main/proxies/https-tested/youtube.txt
-https://raw.githubusercontent.com/ClearProxy/checked-proxy-list/main/socks5/raw/all.txt
-https://raw.githubusercontent.com/Skillter/ProxyGather/refs/heads/master/proxies/working-proxies-all.txt
-https://raw.githubusercontent.com/themiralay/Proxy-List-World/master/data.txt
+# =======================================================
+# 1. 💎 RU SPECIAL (Самые ценные)
+# =======================================================
+https://raw.githubusercontent.com/ITProxy/Ban_Proxies/main/RU_proxies.txt
+
+# =======================================================
+# 2. ТЯЖЕЛАЯ АРТИЛЛЕРИЯ (Огромные списки - HTTP/SOCKS5)
+# =======================================================
+https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt
+https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt
+https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt
+https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt
+https://raw.githubusercontent.com/prxchk/proxy-list/main/socks5.txt
+https://raw.githubusercontent.com/prxchk/proxy-list/main/http.txt
+
+# =======================================================
+# 3. АГРЕССИВНЫЕ СКАНЕРЫ (Китай, но много находок)
+# =======================================================
+https://raw.githubusercontent.com/MuRongPIG/Proxy-Master/main/socks5.txt
+https://raw.githubusercontent.com/MuRongPIG/Proxy-Master/main/http.txt
+https://raw.githubusercontent.com/mmpx12/proxy-list/master/socks5.txt
+https://raw.githubusercontent.com/mmpx12/proxy-list/master/http.txt
+https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/socks5.txt
+https://raw.githubusercontent.com/ALIILAPRO/Proxy/main/http.txt
+https://raw.githubusercontent.com/Zorn5/Proxy-List/master/socks5.txt
+
+# =======================================================
+# 4. КАЧЕСТВЕННЫЕ / ПРОВЕРЕННЫЕ
+# =======================================================
+https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
+https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt
+https://raw.githubusercontent.com/rdavydov/proxy-list/main/proxies/socks5.txt
+https://raw.githubusercontent.com/rdavydov/proxy-list/main/proxies/http.txt
+https://raw.githubusercontent.com/UptimerBot/proxy-list/main/proxies/socks5.txt
+https://raw.githubusercontent.com/UptimerBot/proxy-list/main/proxies/http.txt
