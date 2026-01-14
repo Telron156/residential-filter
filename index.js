@@ -6,16 +6,17 @@ const { HttpProxyAgent } = require('http-proxy-agent');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 
-// ===================== НАСТРОЙКИ (BALANCED EDITION) =====================
+// ===================== НАСТРОЙКИ (GITHUB ACTIONS EDITION) =====================
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';       // Общий список
-const OUTPUT_FILE_RU = 'valid_proxies_ru.txt'; // Отдельный файл для RU
+const OUTPUT_FILE_RU = 'valid_proxies_ru.txt'; // Только Россия
 
-// Даем чуть больше времени на коннект
-const TIMEOUT_MS = 8000; 
-const THREADS = 50;
+// 6 секунд - оптимально для GitHub Actions (защита от лагов CPU)
+const TIMEOUT_MS = 6000; 
+// 250 потоков - предел стабильности для 2 vCPU на GitHub
+const THREADS = 250;
 
-// Фильтр хостингов (для чистоты резидентных IP)
+// Фильтр хостингов (Hostings filter)
 const BAD_WORDS = [
   'hosting', 'cloud', 'datacenter', 'vps', 'server', 'ovh', 'hetzner',
   'digitalocean', 'amazon', 'aws', 'google', 'microsoft', 'azure', 'oracle',
@@ -24,10 +25,10 @@ const BAD_WORDS = [
 ];
 
 let VALID_PROXIES_CACHE = [];
-let VALID_PROXIES_RU_CACHE = []; // Кеш для RU прокси
+let VALID_PROXIES_RU_CACHE = [];
 const sourceLoader = axios.create({ timeout: 15000 });
 
-// AXIOS (Маскировка под браузер)
+// AXIOS (Маскировка под Chrome)
 const http = axios.create({
     validateStatus: () => true,
     proxy: false,
@@ -39,13 +40,13 @@ const http = axios.create({
 });
 
 function saveAndExit() {
-    console.log('\n💾 СОХРАНЕНИЕ...');
+    console.log('\n💾 СОХРАНЕНИЕ РЕЗУЛЬТАТОВ...');
     
     // 1. Сохраняем общий список
     if (VALID_PROXIES_CACHE.length > 0) {
         const unique = [...new Set(VALID_PROXIES_CACHE)];
         fs.writeFileSync(OUTPUT_FILE, unique.join('\n'));
-        console.log(`✅ [ALL] Всего рабочих прокси: ${unique.length}`);
+        console.log(`✅ [ALL] Общий список: ${unique.length} шт. -> ${OUTPUT_FILE}`);
     } else {
         console.log('⚠️ [ALL] Нет рабочих прокси.');
     }
@@ -54,9 +55,9 @@ function saveAndExit() {
     if (VALID_PROXIES_RU_CACHE.length > 0) {
         const uniqueRu = [...new Set(VALID_PROXIES_RU_CACHE)];
         fs.writeFileSync(OUTPUT_FILE_RU, uniqueRu.join('\n'));
-        console.log(`🇷🇺 [RU]  Из них русские: ${uniqueRu.length}`);
+        console.log(`🇷🇺 [RU]  Российские: ${uniqueRu.length} шт. -> ${OUTPUT_FILE_RU}`);
     } else {
-        console.log('⚠️ [RU]  Нет русских прокси.');
+        console.log('⚠️ [RU]  Русских прокси не найдено.');
     }
 
     process.exit(0);
@@ -92,9 +93,8 @@ async function checkWithProtocol(host, port, protocol) {
 
     try {
         const start = Date.now();
-        
-        // Стучимся на ya.ru (проверка доступности Яндекса)
-        const res = await http.get('https://ya.ru', {
+        // Стучимся на ya.ru
+        await http.get('https://ya.ru', {
             httpAgent: agents.http,
             httpsAgent: agents.https,
             signal: controller.signal
@@ -145,29 +145,21 @@ async function checkResidential(rawLine) {
         const isp = String(data.isp || '');
         const org = String(data.org || '');
         
-        // Фильтр дата-центров
         const isHosting = data.hosting === true || 
                           BAD_WORDS.some(w => isp.toLowerCase().includes(w) || org.toLowerCase().includes(w));
 
         if (isHosting) return;
 
-        // Определяем, Россия это или нет
         const isRu = data.countryCode === 'RU';
         const icon = latency < 1500 ? '🚀' : '🐢';
-        // Визуально выделяем RU флаг
         const flag = isRu ? '🇷🇺 RUSSIA' : data.countryCode; 
         
         console.log(`✅ YA.RU ALIVE | ${flag} | ${icon} ${latency}ms | ${isp} [${protocol.toUpperCase()}]`);
         
         const validProxy = `${protocol}://${host}:${port}`;
         
-        // Добавляем в основной список
         VALID_PROXIES_CACHE.push(validProxy);
-
-        // Добавляем в RU список, если совпало гео
-        if (isRu) {
-            VALID_PROXIES_RU_CACHE.push(validProxy);
-        }
+        if (isRu) VALID_PROXIES_RU_CACHE.push(validProxy);
 
     } catch (e) { return; } 
     finally { if (agents.cleanup) agents.cleanup(); }
@@ -185,36 +177,65 @@ async function mapWithConcurrency(items, concurrency, workerFn) {
     await Promise.all(workers);
 }
 
+// === УНИВЕРСАЛЬНЫЙ ПАРСЕР (Для URL и для RAW данных) ===
+function parseAndAdd(text, setCollection) {
+    text.split(/\r?\n/).forEach(l => {
+        const m = l.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)/);
+        if (m) {
+            let p = m[0];
+            if (l.includes('socks5://')) p = 'socks5://' + m[0];
+            else if (l.includes('socks4://')) p = 'socks4://' + m[0];
+            else if (l.includes('http://')) p = 'http://' + m[0];
+            setCollection.add(p);
+        }
+    });
+}
+
 async function loadSources() {
     if (!fs.existsSync(SOURCES_FILE)) return [];
-    const urls = fs.readFileSync(SOURCES_FILE, 'utf-8').split('\n').map(l=>l.trim()).filter(l=>l.length>4 && !l.startsWith('#'));
-    console.log(`📡 Sources: ${urls.length}`);
+    
+    // Читаем файл (в нем могут быть и URL, и готовые IP от curl)
+    const rawLines = fs.readFileSync(SOURCES_FILE, 'utf-8')
+        .split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 0 && !l.startsWith('#'));
+
+    console.log(`📡 Raw lines loaded: ${rawLines.length}`);
+    
     const all = new Set();
-    const tasks = urls.map(url => sourceLoader.get(url).then(r => {
-        const txt = typeof r.data==='string'?r.data:JSON.stringify(r.data);
-        txt.split(/\r?\n/).forEach(l => {
-            const m = l.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)/);
-            if(m) {
-                let p = m[0];
-                if(l.includes('socks5://')) p = 'socks5://'+m[0];
-                else if(l.includes('http://')) p = 'http://'+m[0]; // Исправлена опечатка оригинала
-                all.add(p);
-            }
-        });
-    }).catch(()=>{}));
-    await Promise.all(tasks);
+    const urlTasks = [];
+
+    for (const line of rawLines) {
+        // Если это URL - качаем
+        if (line.startsWith('http://') || line.startsWith('https://')) {
+            urlTasks.push(sourceLoader.get(line).then(r => {
+                const txt = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
+                parseAndAdd(txt, all);
+            }).catch(() => {}));
+        } else {
+            // Если это просто IP:PORT - парсим сразу
+            parseAndAdd(line, all);
+        }
+    }
+
+    if (urlTasks.length > 0) {
+        console.log(`🔄 Downloading content from ${urlTasks.length} URLs...`);
+        await Promise.all(urlTasks);
+    }
+
     return Array.from(all);
 }
 
 async function main() {
-    console.log('--- YANDEX RESIDENTIAL FILTER (Dual Output) ---\n');
+    console.log('--- YANDEX RESIDENTIAL FILTER (For index.js) ---\n');
     const raw = await loadSources();
-    if(raw.length===0) return;
+    if(raw.length===0) { console.log('Нет источников!'); return; }
+    
     const unique = [...new Set(raw)];
     console.log(`📥 Candidates: ${unique.length} | Threads: ${THREADS}`);
     
-    // Тайм-аут всего скрипта (45 минут)
-    const t = setTimeout(() => { console.log('TIMEOUT'); saveAndExit(); }, 45*60000);
+    // Таймаут для GitHub Actions
+    const t = setTimeout(() => { console.log('HARD TIMEOUT'); saveAndExit(); }, 50*60000);
     
     await mapWithConcurrency(unique, THREADS, checkResidential);
     
@@ -222,4 +243,4 @@ async function main() {
     saveAndExit();
 }
 
-main().catch(e => process.exit(1));
+main().catch(e => { console.error(e); process.exit(1); });
