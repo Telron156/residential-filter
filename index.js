@@ -12,9 +12,9 @@ const OUTPUT_FILE = 'valid_proxies.txt';       // Общий список
 const OUTPUT_FILE_RU = 'valid_proxies_ru.txt'; // Только Россия
 
 // 6 секунд - оптимально для GitHub Actions (защита от лагов CPU)
-const TIMEOUT_MS = 6000; 
+const TIMEOUT_MS = 8000; 
 // 250 потоков - предел стабильности для 2 vCPU на GitHub
-const THREADS = 250;
+const THREADS = 150;
 
 // Фильтр хостингов (Hostings filter)
 const BAD_WORDS = [
