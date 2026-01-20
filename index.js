@@ -10,8 +10,8 @@ const { SocksProxyAgent } = require('socks-proxy-agent');
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
 
-// Тайм-аут 6 секунд
-const TIMEOUT_MS = 6000; 
+// Тайм-аут 5 секунд
+const TIMEOUT_MS = 5000; 
 // 200 потоков
 const THREADS = 200;
 
