@@ -5,17 +5,18 @@ const axios = require('axios');
 const { HttpProxyAgent } = require('http-proxy-agent');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
+const https = require('https'); // Нужно для настройки агента
 
-// ===================== НАСТРОЙКИ (V6.4 ELITE: RESIDENTIAL ONLY) =====================
+// ===================== НАСТРОЙКИ (V6.5 HTTPS ELITE) =====================
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
 
-// Тайм-аут 6 секунд
-const TIMEOUT_MS = 6000; 
+// Тайм-аут 
+const TIMEOUT_MS = 12000; 
 // 200 потоков
 const THREADS = 200;
 
-// 1. HARD BAN ПОДCЕТЕЙ (Главная защита от Cogent/ColoCrossing)
+// 1. HARD BAN ПОДCЕТЕЙ (Защита от Cogent/ColoCrossing/DataCenters)
 const BANNED_RANGES = [
     /^154\.3\./,      // Cogent
     /^38\.154\./,     // Cogent
@@ -45,24 +46,11 @@ const CRITICAL_ASNS = [
     'AS46606'  // Unified Layer
 ];
 
-// 3. ЧЕРНЫЙ СПИСОК БРЕНДОВ (ФИНАЛЬНАЯ ПОЛИРОВКА)
+// 3. ЧЕРНЫЙ СПИСОК БРЕНДОВ
 const BAD_WORDS = [
-    // --- НОВЫЕ ФИЛЬТРЫ (ВЫРЕЗАЕМ ПОСЛЕДНИХ "СЕРЫХ") ---
-    'waicore',      // Дешевые VPS (Германия)
-    'akamai',       // CDN (Не жилой)
-    'servers tech', // Хостинг
-    'reliable',     // ReliableSite Hosting
-    
-    // --- КОРПОРАТИВНЫЕ МОНСТРЫ ---
-    'alibaba',   // Китайские облака
-    'datacamp',  // CDN/VPN хостинг
-    'oracle',    // Корпоративное облако
-    'ipxo',      // Биржа IP
-    
-    // --- ИРАН ---
+    'waicore', 'akamai', 'servers tech', 'reliable', 
+    'alibaba', 'datacamp', 'oracle', 'ipxo',
     'cloudinow', 'arvancloud',
-
-    // --- БАЗОВЫЙ СПИСОК ХОСТИНГОВ ---
     'cogent', 'frantech', 'buyvm', 'colocrossing', 'bluehost', 'unified layer',
     'total server', 'digitalocean', 'hetzner', 'ovh', 'linode', 'vultr', 
     'contabo', 'leaseweb', 'hostinger', 'selectel', 'timeweb', 'aeza', 
@@ -76,19 +64,28 @@ let PROXIES_GLOBAL = [];
 
 const sourceLoader = axios.create({ timeout: 15000 });
 
-// AXIOS
+// === [FIX] ОБНОВЛЕННЫЙ AXIOS ДЛЯ ПРОВЕРКИ HTTPS ===
 const http = axios.create({
     proxy: false,
-    validateStatus: () => true, 
+    timeout: TIMEOUT_MS,
+    // Принимаем только 200 (ОК) и 403 (Капча Яндекса - значит достучались)
+    // Остальные (500, 502, 407, 405) считаем ошибкой
+    validateStatus: (status) => {
+        return status === 200 || status === 403;
+    },
     headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
+    },
+    // Важно: Игнорируем ошибки SSL сертификатов самого прокси, 
+    // но при этом проверяем возможность установки HTTPS соединения
+    httpsAgent: new https.Agent({ rejectUnauthorized: false })
 });
 
 function saveAndExit() {
-    console.log('\n💾 СОХРАНЕНИЕ РЕЗУЛЬТАТОВ (ELITE LIST)...');
+    console.log('\n💾 СОХРАНЕНИЕ РЕЗУЛЬТАТОВ (HTTPS READY)...');
     
-    // Склеиваем: Сначала RU, потом остальные
     const finalChain = [...new Set(PROXIES_RU), ...new Set(PROXIES_GLOBAL)];
     const uniqueFinal = [...new Set(finalChain)];
 
@@ -120,6 +117,7 @@ function buildAgents(proxyUrl) {
     } catch { return null; }
 }
 
+// === [FIX] ПРОВЕРКА СТРОГО HTTPS ===
 async function checkWithProtocol(host, port, protocol) {
     const proxyUrl = `${protocol}://${host}:${port}`;
     const agents = buildAgents(proxyUrl);
@@ -130,11 +128,22 @@ async function checkWithProtocol(host, port, protocol) {
 
     try {
         const start = Date.now();
-        await http.get('https://ya.ru', {
+        
+        // Запрос строго на HTTPS. Если прокси не поддерживает CONNECT - упадет с ошибкой.
+        const response = await http.get('https://ya.ru', {
             httpAgent: agents.http,
-            httpsAgent: agents.https,
+            httpsAgent: agents.https, // Используется для HTTPS
             signal: controller.signal
         });
+
+        // [FIX] Защита от "Фейковых 200"
+        // Некоторые прокси отдают код 200, но возвращают страницу логина провайдера или заглушку.
+        // Главная Яндекса обычно весит больше 500 байт.
+        const dataLength = response.data ? String(response.data).length : 0;
+        if (response.status === 200 && dataLength < 500) {
+            throw new Error('Fake 200 Response (Too short)');
+        }
+
         const latency = Date.now() - start;
         return { protocol, latency, agents };
     } catch (e) {
@@ -156,22 +165,33 @@ async function checkResidential(rawLine) {
     // 0. HARD BAN (IP Ranges)
     if (BANNED_RANGES.some(regex => regex.test(host))) return;
 
-    let candidates = ['http', 'socks5'];
-    if (rawLine.startsWith('socks')) candidates = ['socks5'];
-    else if (rawLine.startsWith('http')) candidates = ['http'];
+    // === [FIX] УЛУЧШЕННЫЙ ВЫБОР КАНДИДАТОВ ===
+    let candidates = [];
+    
+    if (rawLine.includes('socks')) {
+        // Если в источнике указано socks - проверяем 5 и 4 (многие путают)
+        candidates = ['socks5', 'socks4'];
+    } else {
+        // Если указано http или ничего - проверяем ВСЁ.
+        // Часто socks4/5 лежат в списках http.
+        candidates = ['http', 'socks5', 'socks4'];
+    }
 
     let winner = null;
     try {
+        // Гонка протоколов: кто первый успешно откроет HTTPS Яндекс
         winner = await Promise.any(candidates.map(p => checkWithProtocol(host, port, p)));
     } catch { return; }
 
     const { protocol, latency, agents } = winner;
 
     try {
+        // Проверка ГЕО (Хостинг/Мобайл)
+        // Тут оставляем http, так как API может быть без https, нам главное инфу получить
         const infoRes = await http.get('http://ip-api.com/json/?fields=status,countryCode,isp,org,as,mobile,proxy,hosting', {
             httpAgent: agents.http,
             httpsAgent: agents.https,
-            timeout: 5000
+            timeout: 10000 // Чуть больше времени на ГЕО
         });
 
         const data = infoRes.data || {};
@@ -184,24 +204,23 @@ async function checkResidential(rawLine) {
         // 1. ASN BAN
         if (CRITICAL_ASNS.some(bad => asInfo.includes(bad))) return;
 
-        // 2. BRAND BAN (Максимальная строгость)
+        // 2. BRAND BAN
         const isBadBrand = BAD_WORDS.some(w => 
             isp.includes(w) || org.includes(w) || asInfo.toLowerCase().includes(w)
         );
-
         if (isBadBrand) return;
 
-        // ВЫВОД И СОРТИРОВКА
+        // ВЫВОД
         const isRu = data.countryCode === 'RU';
         const icon = latency < 1500 ? '🚀' : '🐢';
         const type = data.mobile ? '📱 MOB' : (data.hosting ? '🏢 BIZ' : '🏠 HOME');
         const flag = isRu ? '🇷🇺 RU' : data.countryCode;
         
-        console.log(`✅ ADDED | ${flag} | ${type} | ${icon} ${latency}ms | ${data.isp.substring(0, 25)}`);
+        console.log(`✅ ADDED | ${flag} | ${type} | ${icon} ${latency}ms | [${protocol.toUpperCase()}] ${data.isp.substring(0, 20)}`);
         
+        // Важно: сохраняем с правильным протоколом
         const validProxy = `${protocol}://${host}:${port}`;
         
-        // РАСПРЕДЕЛЯЕМ ПО СПИСКАМ
         if (isRu) {
             PROXIES_RU.push(validProxy);
         } else {
@@ -228,10 +247,12 @@ function parseAndAdd(text, setCollection) {
     text.split(/\r?\n/).forEach(l => {
         const m = l.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)/);
         if (m) {
+            // Если в строке есть явный протокол - берем его, если нет - просто IP:PORT
             let p = m[0];
             if (l.includes('socks5://')) p = 'socks5://' + m[0];
             else if (l.includes('socks4://')) p = 'socks4://' + m[0];
             else if (l.includes('http://')) p = 'http://' + m[0];
+            // Если протокола нет, checkResidential сам переберет все варианты
             setCollection.add(p);
         }
     });
@@ -257,12 +278,15 @@ async function loadSources() {
 }
 
 async function main() {
-    console.log('--- PROXY CHECKER (V6.4 ELITE: RESIDENTIAL ONLY) ---\n');
+    console.log('--- PROXY CHECKER (V6.5 HTTPS ELITE) ---\n');
     const raw = await loadSources();
     if(raw.length===0) return;
     const unique = [...new Set(raw)];
     console.log(`📥 Candidates: ${unique.length} | Threads: ${THREADS} | Timeout: ${TIMEOUT_MS}ms`);
-    const t = setTimeout(() => { console.log('HARD TIMEOUT'); saveAndExit(); }, 45*60000);
+    
+    // Тайм-аут на всю работу (чтобы не висеть вечно)
+    const t = setTimeout(() => { console.log('HARD TIMEOUT'); saveAndExit(); }, 60*60000); // 1 час
+    
     await mapWithConcurrency(unique, THREADS, checkResidential);
     clearTimeout(t);
     saveAndExit();
