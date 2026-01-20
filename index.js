@@ -6,12 +6,12 @@ const { HttpProxyAgent } = require('http-proxy-agent');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 
-// ===================== НАСТРОЙКИ (V6.3 CLEANER + RU FIRST) =====================
+// ===================== НАСТРОЙКИ (V6.4 ELITE: RESIDENTIAL ONLY) =====================
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
 
-// Тайм-аут 5 секунд
-const TIMEOUT_MS = 5000; 
+// Тайм-аут 6 секунд
+const TIMEOUT_MS = 6000; 
 // 200 потоков
 const THREADS = 200;
 
@@ -45,18 +45,24 @@ const CRITICAL_ASNS = [
     'AS46606'  // Unified Layer
 ];
 
-// 3. ЧЕРНЫЙ СПИСОК БРЕНДОВ (ФИНАЛЬНЫЙ ОТСЕВ)
+// 3. ЧЕРНЫЙ СПИСОК БРЕНДОВ (ФИНАЛЬНАЯ ПОЛИРОВКА)
 const BAD_WORDS = [
-    // --- НОВЫЕ ФИЛЬТРЫ (КОРПОРАТИВНЫЕ МОНСТРЫ) ---
-    'alibaba',   // Китайские облака (красный траст)
+    // --- НОВЫЕ ФИЛЬТРЫ (ВЫРЕЗАЕМ ПОСЛЕДНИХ "СЕРЫХ") ---
+    'waicore',      // Дешевые VPS (Германия)
+    'akamai',       // CDN (Не жилой)
+    'servers tech', // Хостинг
+    'reliable',     // ReliableSite Hosting
+    
+    // --- КОРПОРАТИВНЫЕ МОНСТРЫ ---
+    'alibaba',   // Китайские облака
     'datacamp',  // CDN/VPN хостинг
     'oracle',    // Корпоративное облако
-    'ipxo',      // Биржа IP (арендные адреса)
+    'ipxo',      // Биржа IP
     
-    // --- ИРАН (СБОИ) ---
+    // --- ИРАН ---
     'cloudinow', 'arvancloud',
 
-    // --- СТАРЫЙ СПИСОК (ХОСТИНГИ) ---
+    // --- БАЗОВЫЙ СПИСОК ХОСТИНГОВ ---
     'cogent', 'frantech', 'buyvm', 'colocrossing', 'bluehost', 'unified layer',
     'total server', 'digitalocean', 'hetzner', 'ovh', 'linode', 'vultr', 
     'contabo', 'leaseweb', 'hostinger', 'selectel', 'timeweb', 'aeza', 
@@ -80,7 +86,7 @@ const http = axios.create({
 });
 
 function saveAndExit() {
-    console.log('\n💾 СОХРАНЕНИЕ РЕЗУЛЬТАТОВ (CLEAN LIST)...');
+    console.log('\n💾 СОХРАНЕНИЕ РЕЗУЛЬТАТОВ (ELITE LIST)...');
     
     // Склеиваем: Сначала RU, потом остальные
     const finalChain = [...new Set(PROXIES_RU), ...new Set(PROXIES_GLOBAL)];
@@ -178,7 +184,7 @@ async function checkResidential(rawLine) {
         // 1. ASN BAN
         if (CRITICAL_ASNS.some(bad => asInfo.includes(bad))) return;
 
-        // 2. BRAND BAN (Включая новые фильтры)
+        // 2. BRAND BAN (Максимальная строгость)
         const isBadBrand = BAD_WORDS.some(w => 
             isp.includes(w) || org.includes(w) || asInfo.toLowerCase().includes(w)
         );
@@ -251,7 +257,7 @@ async function loadSources() {
 }
 
 async function main() {
-    console.log('--- PROXY CHECKER (V6.3 CLEANER) ---\n');
+    console.log('--- PROXY CHECKER (V6.4 ELITE: RESIDENTIAL ONLY) ---\n');
     const raw = await loadSources();
     if(raw.length===0) return;
     const unique = [...new Set(raw)];
