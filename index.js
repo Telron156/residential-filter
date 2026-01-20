@@ -6,7 +6,7 @@ const { HttpProxyAgent } = require('http-proxy-agent');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 
-// ===================== НАСТРОЙКИ (V6.1 SINGLE FILE + RU FIRST) =====================
+// ===================== НАСТРОЙКИ (V6.3 CLEANER + RU FIRST) =====================
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
 
@@ -45,8 +45,18 @@ const CRITICAL_ASNS = [
     'AS46606'  // Unified Layer
 ];
 
-// 3. ЧЕРНЫЙ СПИСОК БРЕНДОВ
+// 3. ЧЕРНЫЙ СПИСОК БРЕНДОВ (ФИНАЛЬНЫЙ ОТСЕВ)
 const BAD_WORDS = [
+    // --- НОВЫЕ ФИЛЬТРЫ (КОРПОРАТИВНЫЕ МОНСТРЫ) ---
+    'alibaba',   // Китайские облака (красный траст)
+    'datacamp',  // CDN/VPN хостинг
+    'oracle',    // Корпоративное облако
+    'ipxo',      // Биржа IP (арендные адреса)
+    
+    // --- ИРАН (СБОИ) ---
+    'cloudinow', 'arvancloud',
+
+    // --- СТАРЫЙ СПИСОК (ХОСТИНГИ) ---
     'cogent', 'frantech', 'buyvm', 'colocrossing', 'bluehost', 'unified layer',
     'total server', 'digitalocean', 'hetzner', 'ovh', 'linode', 'vultr', 
     'contabo', 'leaseweb', 'hostinger', 'selectel', 'timeweb', 'aeza', 
@@ -54,7 +64,7 @@ const BAD_WORDS = [
     'profit server', 'mevspace', 'pq hosting', 'smartape', 'firstvds'
 ];
 
-// Разделяем хранение, чтобы потом склеить в нужном порядке
+// Разделяем хранение
 let PROXIES_RU = [];
 let PROXIES_GLOBAL = [];
 
@@ -70,11 +80,10 @@ const http = axios.create({
 });
 
 function saveAndExit() {
-    console.log('\n💾 СОХРАНЕНИЕ РЕЗУЛЬТАТОВ (RU FIRST)...');
+    console.log('\n💾 СОХРАНЕНИЕ РЕЗУЛЬТАТОВ (CLEAN LIST)...');
     
     // Склеиваем: Сначала RU, потом остальные
     const finalChain = [...new Set(PROXIES_RU), ...new Set(PROXIES_GLOBAL)];
-    // Убираем возможные дубликаты, если IP попал в оба списка (маловероятно, но для надежности)
     const uniqueFinal = [...new Set(finalChain)];
 
     if (uniqueFinal.length > 0) {
@@ -138,7 +147,7 @@ async function checkResidential(rawLine) {
     const port = parts.pop();
     const host = parts.join(':');
 
-    // 0. HARD BAN
+    // 0. HARD BAN (IP Ranges)
     if (BANNED_RANGES.some(regex => regex.test(host))) return;
 
     let candidates = ['http', 'socks5'];
@@ -169,7 +178,7 @@ async function checkResidential(rawLine) {
         // 1. ASN BAN
         if (CRITICAL_ASNS.some(bad => asInfo.includes(bad))) return;
 
-        // 2. BRAND BAN
+        // 2. BRAND BAN (Включая новые фильтры)
         const isBadBrand = BAD_WORDS.some(w => 
             isp.includes(w) || org.includes(w) || asInfo.toLowerCase().includes(w)
         );
@@ -215,7 +224,7 @@ function parseAndAdd(text, setCollection) {
         if (m) {
             let p = m[0];
             if (l.includes('socks5://')) p = 'socks5://' + m[0];
-            else if (l.includes('socks4://')) p = 'socks4://' + m[0]; // (socks4 отсеется при проверке)
+            else if (l.includes('socks4://')) p = 'socks4://' + m[0];
             else if (l.includes('http://')) p = 'http://' + m[0];
             setCollection.add(p);
         }
@@ -242,7 +251,7 @@ async function loadSources() {
 }
 
 async function main() {
-    console.log('--- PROXY CHECKER (V6.1 RU FIRST) ---\n');
+    console.log('--- PROXY CHECKER (V6.3 CLEANER) ---\n');
     const raw = await loadSources();
     if(raw.length===0) return;
     const unique = [...new Set(raw)];
