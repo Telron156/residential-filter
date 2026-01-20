@@ -18,10 +18,18 @@ const THREADS = 150;
 
 // Фильтр хостингов (Hostings filter)
 const BAD_WORDS = [
-  'hosting', 'cloud', 'datacenter', 'vps', 'server', 'ovh', 'hetzner',
-  'digitalocean', 'amazon', 'aws', 'google', 'microsoft', 'azure', 'oracle',
-  'alibaba', 'tencent', 'linode', 'vultr', 'm247', 'choopa', 'tor', 'vpn',
-  'dedicated', 'leaseweb', 'clouvider', 'cogent', 'gtt', 'ipxo'
+  // Общие слова
+  'hosting', 'cloud', 'datacenter', 'vps', 'server', 'dedicated', 'tor', 'vpn', 'proxy',
+  
+  // Крупные мировые
+  'amazon', 'aws', 'google', 'microsoft', 'azure', 'oracle', 'digitalocean',
+  'ovh', 'hetzner', 'linode', 'vultr', 'leaseweb', 
+  
+  // Азия и Китай (ОБНОВЛЕНО)
+  'alibaba', 'aliyun', 'tencent', 'aceville', 'huawei', 'chinanet', 'baiduspider', 'ucloud',
+  
+  // Токсичные хостинги (часто спамят)
+  'm247', 'choopa', 'clouvider', 'cogent', 'gtt', 'ipxo', 'contabo', 'kamatera', 'hostinger', 'colocrossing'
 ];
 
 let VALID_PROXIES_CACHE = [];
