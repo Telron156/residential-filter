@@ -19,14 +19,21 @@ const THREADS = 180;
 // Фильтр хостингов (Hostings filter)
 const BAD_WORDS = [
   // 1. Явные признаки сервера (Строго)
-  'hosting', 'datacenter', 'vps', 'cloud', 'dedic', 'colocation',
+  'hosting', 'datacenter', 'vps', 'cloud', 'dedic', 'colocation', 'colo', 'server',
   
-  // 2. Главные враги (Облачные гиганты) - их баним без жалости
-  'amazon', 'aws', 'google cloud', 'azure', 'alibaba', 'aliyun', 'tencent', 'oracle',
+  // 2. Главные враги (Облачные гиганты)
+  'amazon', 'aws', 'google', 'azure', 'oracle', 
   'digitalocean', 'hetzner', 'ovh', 'linode', 'vultr',
   
-  // 3. Токсичные магистрали (Тот самый Cogent и его друзья)
-  'cogent', 'choopa', 'm247', 'clouvider', 'gtt', 'leaseweb', 'hostinger', 'contabo'
+  // 3. Азия и Китай (Те самые "призраки")
+  'alibaba', 'aliyun', 'tencent', 'aceville', 'huawei', 'chinanet', 'baiduspider', 'ucloud',
+  
+  // 4. Токсичные магистрали и дешевые VPS
+  'cogent', 'choopa', 'm247', 'clouvider', 'gtt', 'leaseweb', 'hostinger', 'contabo', 
+  'kamatera', 'colocrossing', 'frantech',
+  
+  // 5. Локальные маркеры (Из ваших логов)
+  'waltham' // Город-датацентр в США, откуда шел бот
 ];
 
 let VALID_PROXIES_CACHE = [];
