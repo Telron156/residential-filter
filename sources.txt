@@ -1,49 +1,39 @@
 # =======================================================
-# 1. 💎 RU SPECIAL (Акцент на Россию)
+# 1. 💎 FRESH BLOOD (НОВЫЕ ИСТОЧНИКИ - Добавил сюда)
+# =======================================================
+https://raw.githubusercontent.com/MuRongPIG/Proxy-Master/main/socks5.txt
+https://raw.githubusercontent.com/prxchk/proxy-list/main/socks5.txt
+https://raw.githubusercontent.com/officialputuid/KangProxy/main/xResults/Socks5.txt
+https://raw.githubusercontent.com/rohes77/Free-Proxy-List/main/socks5.txt
+
+# =======================================================
+# 2. 🇷🇺 RU SPECIAL (Лучшее для РФ)
 # =======================================================
 https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/country/RU.txt
 https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/proxies-country/RU.txt
-# Elliottophellia (Хорошая выборка RU):
-https://raw.githubusercontent.com/elliottophellia/yakumo/master/results/socks5/global/ru/data.txt
-https://raw.githubusercontent.com/elliottophellia/yakumo/master/results/http/global/ru/data.txt
 
 # =======================================================
-# 2. MASSIVE LISTS (Основа - TheSpeedX и Monosans)
-# =======================================================
-https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt
-https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt
-https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt
-https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt
-https://raw.githubusercontent.com/zloi-user/hideip.me/main/socks5.txt
-https://raw.githubusercontent.com/zloi-user/hideip.me/main/http.txt
-
-# =======================================================
-# 3. VOLUME BOOSTER (Для массы, но без фанатизма)
-# =======================================================
-# ErcinDedeoglu (Даст +10к адресов, немного "грязный", но фильтр справится):
-https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks5.txt
-https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/http.txt
-# Mmpx12 (Стабильный средний лист):
-https://raw.githubusercontent.com/mmpx12/proxy-list/master/socks5.txt
-https://raw.githubusercontent.com/mmpx12/proxy-list/master/http.txt
-
-# =======================================================
-# 4. FAST SCANNERS (Быстрые обновления)
-# =======================================================
-https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/socks5.txt
-https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/http.txt
-https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks5.txt
-https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/http.txt
-# Obtso (Дополнительный источник):
-https://raw.githubusercontent.com/Obtso/proxy-list/master/socks5.txt
-https://raw.githubusercontent.com/Obtso/proxy-list/master/http.txt
-
-# =======================================================
-# 5. HIGH QUALITY / VERIFIED
+# 3. 🔥 TOP TIER SOCKS5 (Самые качественные из старых)
 # =======================================================
 https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
-https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt
-https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt
-# Anonym0usWork (Частые обновления):
+https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/socks5.txt
+https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt
+https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks5.txt
+https://raw.githubusercontent.com/zloi-user/hideip.me/main/socks5.txt
 https://raw.githubusercontent.com/Anonym0usWork/proxy-list/main/socks5.txt
-https://raw.githubusercontent.com/Anonym0usWork/proxy-list/main/http.txt
+
+# =======================================================
+# 4. 📦 MASSIVE DUMPS (Много дублей, но нужны для объема)
+# =======================================================
+https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt
+https://raw.githubusercontent.com/mmpx12/proxy-list/master/socks5.txt
+https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks5.txt
+
+# =======================================================
+# 5. HTTP BACKUP (На случай, если SOCKS кончатся)
+# Внимание: Бот возьмет отсюда только те, что умеют HTTPS (CONNECT)
+# =======================================================
+https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/http.txt
+https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt
+https://raw.githubusercontent.com/prxchk/proxy-list/main/http.txt
+https://raw.githubusercontent.com/officialputuid/KangProxy/main/xResults/Http.txt
