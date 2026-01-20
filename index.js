@@ -6,46 +6,43 @@ const { HttpProxyAgent } = require('http-proxy-agent');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 
-// ===================== НАСТРОЙКИ (SNIPER EDITION) =====================
+// ===================== НАСТРОЙКИ (SNIPER FINAL EDITION) =====================
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
 const OUTPUT_FILE_RU = 'valid_proxies_ru.txt';
 
-// 4.5 секунды - жесткий отсев. Только быстрые.
+// 4.5 секунды - жесткий отсев тормозных прокси
 const TIMEOUT_MS = 4500; 
-// 180 потоков - чтобы быстро просеять руду.
+// 180 потоков - для быстрой проверки
 const THREADS = 180;
 
-// 1. ЧЕРНЫЙ СПИСОК ASN (Главные мусорки мира)
+// 1. ЧЕРНЫЙ СПИСОК ASN (Блокировка по паспорту)
+// Сюда добавлены все враги из вашего последнего списка
 const BAD_ASNS = [
-    'AS174',   // Cogent
-    'AS9009',  // M247
+    'AS174',   // Cogent (Ваш главный враг - 154.3.236.202)
+    'AS9009',  // M247 (Крупнейший ботнет)
     'AS14061', // DigitalOcean
-    'AS16509', // Amazon
+    'AS16509', // Amazon.com
     'AS24940', // Hetzner
-    'AS16276', // OVH
+    'AS16276', 'AS12876', // OVH
     'AS45102', // Alibaba
-    'AS132203', // Tencent
-    'AS45090',  // Tencent
-    'AS63949', // Linode
-    'AS20473', // Vultr/Choopa
-    'AS53667'  // FranTech (BuyVM)
+    'AS53667', // FranTech / BuyVM (Было много в вашем списке)
+    'AS36352', // ColoCrossing (Тоже было много)
+    'AS46606', // Unified Layer (Bluehost)
+    'AS29802', // Hivelocity
+    'AS20473', 'AS63949', // Choopa, Linode, Vultr
+    'AS13335', // Cloudflare
+    'AS132203', 'AS45090' // Tencent
 ];
 
-// 2. ЧЕРНЫЙ СПИСОК СЛОВ (Хирургическая точность)
+// 2. ЧЕРНЫЙ СПИСОК СЛОВ (Добиваем остатки)
 const BAD_WORDS = [
-  // --- ТИПЫ ХОСТИНГОВ (Вернули, но аккуратно) ---
-  'hosting', 'vps', 'cloud', 'datacenter', 'dedic', 'server', 'colocation',
-  
-  // --- ГИГАНТЫ ---
-  'amazon', 'google', 'azure', 'oracle', 'alibaba', 'tencent',
-  
-  // --- ДЕШЕВЫЕ ХОСТИНГИ (Популярные в паблик-листах RU/EU) ---
-  'digitalocean', 'hetzner', 'ovh', 'linode', 'vultr', 'contabo',
-  'leaseweb', 'hostinger', 'selectel', 'timeweb', 'aeza', 'firstbyte',
-  'myarena', 'ihor', 'vds', 'beget', 'reg.ru', 'sprinthost', 'ispsystem',
-  'fly servers', 'profit server', 'mevspace', 'pq hosting', 'smartape', 
-  'adminvps', 'mchost', 'firstvds'
+    'hosting', 'vps', 'cloud', 'datacenter', 'dedic', 'server', 'colocation',
+    'amazon', 'google', 'azure', 'oracle', 'alibaba', 'tencent',
+    'digitalocean', 'hetzner', 'ovh', 'linode', 'vultr', 'contabo',
+    'leaseweb', 'hostinger', 'selectel', 'timeweb', 'aeza', 'firstbyte',
+    'frantech', 'buyvm', 'colocrossing', 'bluehost', 'unified layer',
+    'solutions', 'systems', 'host' 
 ];
 
 let VALID_PROXIES_CACHE = [];
@@ -112,7 +109,7 @@ async function checkWithProtocol(host, port, protocol) {
 
     try {
         const start = Date.now();
-        // Проверяем доступность Яндекса
+        // Стучимся на ya.ru для проверки жизни
         await http.get('https://ya.ru', {
             httpAgent: agents.http,
             httpsAgent: agents.https,
@@ -139,7 +136,7 @@ async function checkResidential(rawLine) {
     const port = parts.pop();
     const host = parts.join(':');
 
-    // Оптимизация: пробуем SOCKS5 первым, так как они чаще живые в микс-листах
+    // Приоритет SOCKS5
     let candidates = ['socks5']; 
     if (rawLine.startsWith('http')) candidates = ['http'];
     else if (!rawLine.startsWith('socks')) candidates = ['socks5', 'http'];
@@ -152,7 +149,7 @@ async function checkResidential(rawLine) {
     const { protocol, latency, agents } = winner;
 
     try {
-        // Запрашиваем данные, ВАЖНО: поле 'as' и 'mobile'
+        // ЗАПРОС ИНФОРМАЦИИ (с полями AS и ISP)
         const infoRes = await http.get('http://ip-api.com/json/?fields=status,countryCode,isp,org,as,mobile,proxy,hosting', {
             httpAgent: agents.http,
             httpsAgent: agents.https,
@@ -164,32 +161,38 @@ async function checkResidential(rawLine) {
 
         const isp = String(data.isp || '').toLowerCase();
         const org = String(data.org || '').toLowerCase();
-        const asInfo = String(data.as || '');
+        const asInfo = String(data.as || ''); // Не переводим в lowerCase, чтобы AS174 осталось AS174
 
-        // 1. ASN FILTER (Самый надежный - режем по паспорту)
-        if (BAD_ASNS.some(badAsn => asInfo.startsWith(badAsn))) return;
+        // --- ЛОГИКА ФИЛЬТРАЦИИ ---
 
-        // 2. TEXT FILTER (Режем по словам)
+        // 1. ПРОВЕРКА ПО ASN (Самая жесткая)
+        // Используем .includes(), чтобы найти "AS174" в любой части строки
+        const bannedAsn = BAD_ASNS.find(bad => asInfo.includes(bad));
+        if (bannedAsn) {
+            // Раскомментируйте следующую строку, если хотите видеть, кого убили:
+             console.log(`❌ BLOCKED [ASN]: ${host} -> ${asInfo} (Found: ${bannedAsn})`);
+            return;
+        }
+
+        // 2. ПРОВЕРКА ПО СЛОВАМ
         const isBadWord = BAD_WORDS.some(w => 
             isp.includes(w) || org.includes(w) || asInfo.toLowerCase().includes(w)
         );
         
-        // 3. СПАСЕНИЕ РЯДОВОГО МОБИЛЬНОГО
-        // Если нашли слово "network", но это мобилка - оставляем.
-        const isMobile = data.mobile === true || isp.includes('mobile') || isp.includes('telecom') || isp.includes('cable');
+        // Спасаем мобильные прокси, даже если у них странные названия
+        const isMobile = data.mobile === true || isp.includes('mobile') || isp.includes('telecom') || isp.includes('cable') || isp.includes('home');
         
-        // Если это плохой хостинг И это НЕ мобильный -> В БАН
-        if (isBadWord && !isMobile) return;
+        if (isBadWord && !isMobile) {
+            // console.log(`❌ BLOCKED [TXT]: ${host} -> ${isp}`);
+            return;
+        }
 
-        // --- ВЫВОД РЕЗУЛЬТАТА ---
+        // --- УСПЕХ ---
         const isRu = data.countryCode === 'RU';
         const icon = latency < 1500 ? '🚀' : '🐢';
         const type = isMobile ? '📱 MOB' : (data.hosting ? '🏢 VPS?' : '🏠 HOME');
         
-        // Обрезаем длинные названия ISP для красоты лога
-        const shortIsp = data.isp.length > 25 ? data.isp.substring(0, 22) + '...' : data.isp;
-
-        console.log(`✅ OK | ${data.countryCode} | ${type} | ${icon} ${latency}ms | ${shortIsp}`);
+        console.log(`✅ OK | ${data.countryCode} | ${type} | ${icon} ${latency}ms | ${data.isp.substring(0, 25)}`);
         
         const validProxy = `${protocol}://${host}:${port}`;
         VALID_PROXIES_CACHE.push(validProxy);
@@ -251,14 +254,13 @@ async function loadSources() {
 }
 
 async function main() {
-    console.log('--- SNIPER PROXY CHECKER (Target: High Quality) ---\n');
+    console.log('--- SNIPER PROXY CHECKER (FINAL v4) ---\n');
     const raw = await loadSources();
     if(raw.length===0) { console.log('No sources!'); return; }
     
     const unique = [...new Set(raw)];
     console.log(`📥 Unique IPs: ${unique.length} | Threads: ${THREADS} | Timeout: ${TIMEOUT_MS}ms`);
     
-    // Глобальный тайм-аут 45 минут (для GitHub Actions)
     const t = setTimeout(() => { console.log('HARD TIMEOUT'); saveAndExit(); }, 45*60000);
     
     await mapWithConcurrency(unique, THREADS, checkResidential);
