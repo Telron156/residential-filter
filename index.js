@@ -6,43 +6,51 @@ const { HttpProxyAgent } = require('http-proxy-agent');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 
-// ===================== НАСТРОЙКИ (GITHUB ACTIONS EDITION) =====================
+// ===================== НАСТРОЙКИ (SNIPER EDITION) =====================
 const SOURCES_FILE = 'sources.txt';
-const OUTPUT_FILE = 'valid_proxies.txt';       // Общий список
-const OUTPUT_FILE_RU = 'valid_proxies_ru.txt'; // Только Россия
+const OUTPUT_FILE = 'valid_proxies.txt';
+const OUTPUT_FILE_RU = 'valid_proxies_ru.txt';
 
-// 6 секунд - оптимально для GitHub Actions (защита от лагов CPU)
-const TIMEOUT_MS = 6000; 
-// 250 потоков - предел стабильности для 2 vCPU на GitHub
+// 4.5 секунды - жесткий отсев. Только быстрые.
+const TIMEOUT_MS = 4500; 
+// 180 потоков - чтобы быстро просеять руду.
 const THREADS = 180;
 
-// Фильтр хостингов (Hostings filter)
-// Фильтр хостингов (Hostings filter) - ВЕРСИЯ "ULTRA CLEAN"
+// 1. ЧЕРНЫЙ СПИСОК ASN (Главные мусорки мира)
+const BAD_ASNS = [
+    'AS174',   // Cogent
+    'AS9009',  // M247
+    'AS14061', // DigitalOcean
+    'AS16509', // Amazon
+    'AS24940', // Hetzner
+    'AS16276', // OVH
+    'AS45102', // Alibaba
+    'AS132203', // Tencent
+    'AS45090',  // Tencent
+    'AS63949', // Linode
+    'AS20473', // Vultr/Choopa
+    'AS53667'  // FranTech (BuyVM)
+];
+
+// 2. ЧЕРНЫЙ СПИСОК СЛОВ (Хирургическая точность)
 const BAD_WORDS = [
-  // 1. Явные признаки сервера (База)
-  'hosting', 'datacenter', 'vps', 'cloud', 'dedic', 'colocation', 'colo', 'server',
+  // --- ТИПЫ ХОСТИНГОВ (Вернули, но аккуратно) ---
+  'hosting', 'vps', 'cloud', 'datacenter', 'dedic', 'server', 'colocation',
   
-  // 2. Мировые облака (Гиганты)
-  'amazon', 'aws', 'google', 'azure', 'oracle', 
-  'digitalocean', 'hetzner', 'ovh', 'linode', 'vultr', 'start', // "start" ловит OVH (SoYouStart)
+  // --- ГИГАНТЫ ---
+  'amazon', 'google', 'azure', 'oracle', 'alibaba', 'tencent',
   
-  // 3. Азия (Облака)
-  'alibaba', 'aliyun', 'tencent', 'aceville', 'ucloud', 'baiduspider',
-  
-  // 4. Токсичные магистрали (ГЛАВНЫЕ ВРАГИ)
-  'cogent', 'psi', 'performance', // <--- Ловит скрытый Cogent
-  'choopa', 'm247', 'clouvider', 'gtt', 'leaseweb', 'hostinger', 'contabo', 
-  'kamatera', 'frantech', 'waltham',
-  
-  // 5. Мелкие хостинги, которые часто спамят
-  'cherry', 'uab', 'solutions', 'host', 'layer', 'net', 'network'
-  // Внимание: 'net' и 'network' могут задеть домашних провайдеров. 
-  // Если прокси станет слишком мало - уберите 'net' и 'network'.
+  // --- ДЕШЕВЫЕ ХОСТИНГИ (Популярные в паблик-листах RU/EU) ---
+  'digitalocean', 'hetzner', 'ovh', 'linode', 'vultr', 'contabo',
+  'leaseweb', 'hostinger', 'selectel', 'timeweb', 'aeza', 'firstbyte',
+  'myarena', 'ihor', 'vds', 'beget', 'reg.ru', 'sprinthost', 'ispsystem',
+  'fly servers', 'profit server', 'mevspace', 'pq hosting', 'smartape', 
+  'adminvps', 'mchost', 'firstvds'
 ];
 
 let VALID_PROXIES_CACHE = [];
 let VALID_PROXIES_RU_CACHE = [];
-const sourceLoader = axios.create({ timeout: 15000 });
+const sourceLoader = axios.create({ timeout: 10000 });
 
 // AXIOS (Маскировка под Chrome)
 const http = axios.create({
@@ -50,30 +58,25 @@ const http = axios.create({
     proxy: false,
     headers: { 
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
     }
 });
 
 function saveAndExit() {
     console.log('\n💾 СОХРАНЕНИЕ РЕЗУЛЬТАТОВ...');
     
-    // 1. Сохраняем общий список
     if (VALID_PROXIES_CACHE.length > 0) {
         const unique = [...new Set(VALID_PROXIES_CACHE)];
         fs.writeFileSync(OUTPUT_FILE, unique.join('\n'));
-        console.log(`✅ [ALL] Общий список: ${unique.length} шт. -> ${OUTPUT_FILE}`);
+        console.log(`✅ [ALL] Итого: ${unique.length} шт. -> ${OUTPUT_FILE}`);
     } else {
         console.log('⚠️ [ALL] Нет рабочих прокси.');
     }
 
-    // 2. Сохраняем RU список
     if (VALID_PROXIES_RU_CACHE.length > 0) {
         const uniqueRu = [...new Set(VALID_PROXIES_RU_CACHE)];
         fs.writeFileSync(OUTPUT_FILE_RU, uniqueRu.join('\n'));
         console.log(`🇷🇺 [RU]  Российские: ${uniqueRu.length} шт. -> ${OUTPUT_FILE_RU}`);
-    } else {
-        console.log('⚠️ [RU]  Русских прокси не найдено.');
     }
 
     process.exit(0);
@@ -109,7 +112,7 @@ async function checkWithProtocol(host, port, protocol) {
 
     try {
         const start = Date.now();
-        // Стучимся на ya.ru
+        // Проверяем доступность Яндекса
         await http.get('https://ya.ru', {
             httpAgent: agents.http,
             httpsAgent: agents.https,
@@ -136,9 +139,10 @@ async function checkResidential(rawLine) {
     const port = parts.pop();
     const host = parts.join(':');
 
-    let candidates = ['http', 'socks5'];
-    if (rawLine.startsWith('socks')) candidates = ['socks5'];
-    else if (rawLine.startsWith('http')) candidates = ['http'];
+    // Оптимизация: пробуем SOCKS5 первым, так как они чаще живые в микс-листах
+    let candidates = ['socks5']; 
+    if (rawLine.startsWith('http')) candidates = ['http'];
+    else if (!rawLine.startsWith('socks')) candidates = ['socks5', 'http'];
 
     let winner = null;
     try {
@@ -147,9 +151,9 @@ async function checkResidential(rawLine) {
 
     const { protocol, latency, agents } = winner;
 
-    // ПРОВЕРКА НА ХОСТИНГ И ГЕО
     try {
-        const infoRes = await http.get('http://ip-api.com/json/?fields=status,countryCode,isp,org,proxy,hosting', {
+        // Запрашиваем данные, ВАЖНО: поле 'as' и 'mobile'
+        const infoRes = await http.get('http://ip-api.com/json/?fields=status,countryCode,isp,org,as,mobile,proxy,hosting', {
             httpAgent: agents.http,
             httpsAgent: agents.https,
             timeout: 5000
@@ -158,22 +162,36 @@ async function checkResidential(rawLine) {
         const data = infoRes.data || {};
         if (data.status !== 'success') return;
 
-        const isp = String(data.isp || '');
-        const org = String(data.org || '');
+        const isp = String(data.isp || '').toLowerCase();
+        const org = String(data.org || '').toLowerCase();
+        const asInfo = String(data.as || '');
+
+        // 1. ASN FILTER (Самый надежный - режем по паспорту)
+        if (BAD_ASNS.some(badAsn => asInfo.startsWith(badAsn))) return;
+
+        // 2. TEXT FILTER (Режем по словам)
+        const isBadWord = BAD_WORDS.some(w => 
+            isp.includes(w) || org.includes(w) || asInfo.toLowerCase().includes(w)
+        );
         
-        const isHosting = data.hosting === true || 
-                          BAD_WORDS.some(w => isp.toLowerCase().includes(w) || org.toLowerCase().includes(w));
+        // 3. СПАСЕНИЕ РЯДОВОГО МОБИЛЬНОГО
+        // Если нашли слово "network", но это мобилка - оставляем.
+        const isMobile = data.mobile === true || isp.includes('mobile') || isp.includes('telecom') || isp.includes('cable');
+        
+        // Если это плохой хостинг И это НЕ мобильный -> В БАН
+        if (isBadWord && !isMobile) return;
 
-        if (isHosting) return;
-
+        // --- ВЫВОД РЕЗУЛЬТАТА ---
         const isRu = data.countryCode === 'RU';
         const icon = latency < 1500 ? '🚀' : '🐢';
-        const flag = isRu ? '🇷🇺 RUSSIA' : data.countryCode; 
+        const type = isMobile ? '📱 MOB' : (data.hosting ? '🏢 VPS?' : '🏠 HOME');
         
-        console.log(`✅ YA.RU ALIVE | ${flag} | ${icon} ${latency}ms | ${isp} [${protocol.toUpperCase()}]`);
+        // Обрезаем длинные названия ISP для красоты лога
+        const shortIsp = data.isp.length > 25 ? data.isp.substring(0, 22) + '...' : data.isp;
+
+        console.log(`✅ OK | ${data.countryCode} | ${type} | ${icon} ${latency}ms | ${shortIsp}`);
         
         const validProxy = `${protocol}://${host}:${port}`;
-        
         VALID_PROXIES_CACHE.push(validProxy);
         if (isRu) VALID_PROXIES_RU_CACHE.push(validProxy);
 
@@ -193,14 +211,12 @@ async function mapWithConcurrency(items, concurrency, workerFn) {
     await Promise.all(workers);
 }
 
-// === УНИВЕРСАЛЬНЫЙ ПАРСЕР (Для URL и для RAW данных) ===
 function parseAndAdd(text, setCollection) {
     text.split(/\r?\n/).forEach(l => {
         const m = l.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)/);
         if (m) {
             let p = m[0];
             if (l.includes('socks5://')) p = 'socks5://' + m[0];
-            else if (l.includes('socks4://')) p = 'socks4://' + m[0];
             else if (l.includes('http://')) p = 'http://' + m[0];
             setCollection.add(p);
         }
@@ -210,48 +226,40 @@ function parseAndAdd(text, setCollection) {
 async function loadSources() {
     if (!fs.existsSync(SOURCES_FILE)) return [];
     
-    // Читаем файл (в нем могут быть и URL, и готовые IP от curl)
     const rawLines = fs.readFileSync(SOURCES_FILE, 'utf-8')
         .split('\n')
         .map(l => l.trim())
         .filter(l => l.length > 0 && !l.startsWith('#'));
 
-    console.log(`📡 Raw lines loaded: ${rawLines.length}`);
-    
+    console.log(`📡 Sources: ${rawLines.length}`);
     const all = new Set();
     const urlTasks = [];
 
     for (const line of rawLines) {
-        // Если это URL - качаем
-        if (line.startsWith('http://') || line.startsWith('https://')) {
+        if (line.startsWith('http')) {
             urlTasks.push(sourceLoader.get(line).then(r => {
                 const txt = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
                 parseAndAdd(txt, all);
             }).catch(() => {}));
         } else {
-            // Если это просто IP:PORT - парсим сразу
             parseAndAdd(line, all);
         }
     }
 
-    if (urlTasks.length > 0) {
-        console.log(`🔄 Downloading content from ${urlTasks.length} URLs...`);
-        await Promise.all(urlTasks);
-    }
-
+    if (urlTasks.length > 0) await Promise.all(urlTasks);
     return Array.from(all);
 }
 
 async function main() {
-    console.log('--- YANDEX RESIDENTIAL FILTER (For index.js) ---\n');
+    console.log('--- SNIPER PROXY CHECKER (Target: High Quality) ---\n');
     const raw = await loadSources();
-    if(raw.length===0) { console.log('Нет источников!'); return; }
+    if(raw.length===0) { console.log('No sources!'); return; }
     
     const unique = [...new Set(raw)];
-    console.log(`📥 Candidates: ${unique.length} | Threads: ${THREADS}`);
+    console.log(`📥 Unique IPs: ${unique.length} | Threads: ${THREADS} | Timeout: ${TIMEOUT_MS}ms`);
     
-    // Таймаут для GitHub Actions
-    const t = setTimeout(() => { console.log('HARD TIMEOUT'); saveAndExit(); }, 50*60000);
+    // Глобальный тайм-аут 45 минут (для GitHub Actions)
+    const t = setTimeout(() => { console.log('HARD TIMEOUT'); saveAndExit(); }, 45*60000);
     
     await mapWithConcurrency(unique, THREADS, checkResidential);
     
