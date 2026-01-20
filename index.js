@@ -17,21 +17,27 @@ const TIMEOUT_MS = 6000;
 const THREADS = 180;
 
 // Фильтр хостингов (Hostings filter)
+// Фильтр хостингов (Hostings filter) - ВЕРСИЯ "ULTRA CLEAN"
 const BAD_WORDS = [
-  // 1. Явные признаки сервера
-  'hosting', 'datacenter', 'vps', 'cloud', 'dedic', 'colocation', 'colo',
+  // 1. Явные признаки сервера (База)
+  'hosting', 'datacenter', 'vps', 'cloud', 'dedic', 'colocation', 'colo', 'server',
   
-  // 2. Мировые облака (Тут живых людей нет)
+  // 2. Мировые облака (Гиганты)
   'amazon', 'aws', 'google', 'azure', 'oracle', 
-  'digitalocean', 'hetzner', 'ovh', 'linode', 'vultr',
+  'digitalocean', 'hetzner', 'ovh', 'linode', 'vultr', 'start', // "start" ловит OVH (SoYouStart)
   
-  // 3. АЗИЯ - ТОЛЬКО ОБЛАКА (Обычных провайдеров не трогаем)
+  // 3. Азия (Облака)
   'alibaba', 'aliyun', 'tencent', 'aceville', 'ucloud', 'baiduspider',
   
-  // 4. Токсичные магистрали (США/Европа)
-  'cogent',     // <--- Это ваш "Американец", его обязательно баним
+  // 4. Токсичные магистрали (ГЛАВНЫЕ ВРАГИ)
+  'cogent', 'psi', 'performance', // <--- Ловит скрытый Cogent
   'choopa', 'm247', 'clouvider', 'gtt', 'leaseweb', 'hostinger', 'contabo', 
-  'kamatera', 'frantech', 'waltham'
+  'kamatera', 'frantech', 'waltham',
+  
+  // 5. Мелкие хостинги, которые часто спамят
+  'cherry', 'uab', 'solutions', 'host', 'layer', 'net', 'network'
+  // Внимание: 'net' и 'network' могут задеть домашних провайдеров. 
+  // Если прокси станет слишком мало - уберите 'net' и 'network'.
 ];
 
 let VALID_PROXIES_CACHE = [];
