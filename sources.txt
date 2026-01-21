@@ -4,6 +4,11 @@
 # UrielChaves (Чистый SOCKS5)
 https://raw.githubusercontent.com/UrielChaves/Nodes/main/socks5.txt
 
+# Zloi-User (Вы воскресили этот источник, отличная работа!)
+https://raw.githubusercontent.com/zloi-user/hideip.me/master/socks5.txt
+https://raw.githubusercontent.com/zloi-user/hideip.me/master/http.txt
+https://raw.githubusercontent.com/zloi-user/hideip.me/master/https.txt
+
 # ErcinDedeoglu (Большой микс)
 https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks5.txt
 https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/http.txt
