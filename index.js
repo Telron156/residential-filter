@@ -27,7 +27,7 @@ const CRITICAL_ASNS = [
     'AS45090', 'AS8075', 'AS53667', 'AS36352', 'AS46606'
 ];
 
-// 3. ISP BAN (V7.6 - ULTIMATE CLEAN BASED ON LOGS)
+// 3. ISP BAN (V7.7 - PATCHED AFTER MINING)
 const BAD_WORDS = [
     // === ГИГАНТЫ ХОСТИНГА ===
     'amazon', 'google cloud', 'azure', 'digitalocean', 'hetzner', 'ovh', 
@@ -36,33 +36,35 @@ const BAD_WORDS = [
     'activecloud', 'inferno', 'firstvds', 'vdsina', 'clouvider',
     'alibaba', 'tencent', 'oracle', 'ibm cloud', 'scaleway', 'kamatera',
     
-    // === НОВЫЕ ИЗ ТВОЕГО ЛОГА (Хостинги) ===
-    'reliablesite',   // ReliableSite.Net LLC
-    'namecheap',      // Namecheap, Inc.
-    'godaddy',        // GoDaddy.com, LLC
-    'ionos',          // IONOS SE
-    'cloudflare',     // Cloudflare, Inc.
-    'internet names', // Internet Names For Business
-    'tierpoint',      // TierPoint (Дата-центр)
-    'gigahost',       // Gigahost
-    'green floid',    // Green Floid LLC (Хостинг)
+    // === ТОКСИЧНЫЕ, НАЙДЕННЫЕ В ЛОГАХ ===
+    'waicore',        // Слишком много, часто детектится
+    'emerald onion',  // 🚨 TOR Exit Node
+    'emerald',        // На всякий случай
+    'datawagon',      // Хостинг
+    'g-core',         // CDN/Hosting
+    'gcore',          // CDN/Hosting
+    'cloud assets',   // Хостинг
+    'jsc iot',        // Скорее всего серверные IoT шлюзы
+    'serv.host',      // Хостинг (видно в логе GB)
+    'oc networks',    // Хостинг (видно в логе EE)
 
-    // === ВРЕДНЫЕ СЕТИ ===
+    // === ПРЕДЫДУЩИЕ УСПЕШНЫЕ ФИЛЬТРЫ ===
+    'reliablesite', 'namecheap', 'godaddy', 'ionos', 'cloudflare', 
+    'internet names', 'tierpoint', 'gigahost', 'green floid',
     'packethub', 'cdn77', 'datacamp', 'm247', 'performive', 'tzulo', 
     'psychz', 'choopa', 'creanova', 'pfcloud', 'quadranet', 'colocrossing', 
     'buyvm', 'frantech', 'cogent', 'terrahost', 'ip volume', 'ipvolume', 
     'servers.com', 'servers tech',
 
     // === ГЕО И МУСОР ===
-    'chinanet', 'china unicom', 'china mobile', // Китай (9000ms+ нам не надо)
-    'tor exit', 'tor node', 
+    'chinanet', 'china unicom', 'china mobile', 
+    'tor exit', 'tor node', 'onion', // Добавил onion отдельно
     'opera', 'opera software',
-    'zscaler', // Если хочешь убрать корпоративные шлюзы (их было много) - раскомментируй. Но они быстрые.
-   
+    'zscaler', 
+    
     // === СТОП-СЛОВА ===
     'vpn', 'hosting', 'data center', 'dedicated', 'cdn', 'vps'
 ];
-
 
 let PROXIES_RU = [];
 let PROXIES_GLOBAL = [];
