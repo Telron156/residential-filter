@@ -9,6 +9,10 @@ https://raw.githubusercontent.com/zloi-user/hideip.me/master/socks5.txt
 https://raw.githubusercontent.com/zloi-user/hideip.me/master/http.txt
 https://raw.githubusercontent.com/zloi-user/hideip.me/master/https.txt
 
+# Mmpx12 HTTPS (Ваш новый список)
+https://raw.githubusercontent.com/mmpx12/proxy-list/master/https.txt
+https://raw.githubusercontent.com/mmpx12/proxy-list/master/socks5.txt
+
 # ErcinDedeoglu (Большой микс)
 https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks5.txt
 https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/http.txt
