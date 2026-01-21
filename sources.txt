@@ -1,17 +1,33 @@
 # =======================================================
-# ✅ LIVE SOURCES (Verified 21.01.2026 04:24 MSK)
+# 1. 💎 SOCKS5 PRIORITY (Лучшая анонимность для ПФ)
 # =======================================================
+https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
+https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt
+https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt
+https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks5.txt
+https://raw.githubusercontent.com/zloi-user/hideip.me/main/socks5.txt
+https://raw.githubusercontent.com/prxchk/proxy-list/main/socks5.txt
+https://raw.githubusercontent.com/Vann-Dev/proxy-list/main/proxies/socks5.txt
 
-# 1. TheSpeedX (Жив, 1500+ IP)
+# =======================================================
+# 2. 🇷🇺 RU SPECIAL (Акцент на Россию)
+# =======================================================
+https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/country/RU.txt
+https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/proxies-country/RU.txt
+
+# =======================================================
+# 3. 📦 HTTP HTTPS-READY (Только те, что умеют CONNECT)
+# =======================================================
+# Скрипт-чекер сам отсеет те, что не умеют https://ya.ru
+https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt
+https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt
+https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/http.txt
+https://raw.githubusercontent.com/Vann-Dev/proxy-list/main/proxies/http.txt
+https://raw.githubusercontent.com/Vann-Dev/proxy-list/main/proxies/https.txt
+
+# =======================================================
+# 4. 🗑️ MASSIVE DUMPS (Много дублей, ставить в конец)
+# =======================================================
 https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt
 https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt
-
-# 2. Hookzof (Жив, 200+ IP)
-https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
-
-# 3. Monosans (Только общие списки, country/ МЕРТВА)
-https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt
-https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt
-
-# 4. Proxifly (Через CDN)
 https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.txt
