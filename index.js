@@ -27,40 +27,42 @@ const CRITICAL_ASNS = [
     'AS45090', 'AS8075', 'AS53667', 'AS36352', 'AS46606'
 ];
 
-// 3. ISP BAN (Оптимизированный V7.1 - Безопасный для редких провайдеров)
+// 3. ISP BAN (V7.6 - ULTIMATE CLEAN BASED ON LOGS)
 const BAD_WORDS = [
-    // === ГИГАНТЫ ХОСТИНГА (Точно баним) ===
+    // === ГИГАНТЫ ХОСТИНГА ===
     'amazon', 'google cloud', 'azure', 'digitalocean', 'hetzner', 'ovh', 
     'linode', 'vultr', 'contabo', 'leaseweb', 'hostinger', 'selectel', 
     'timeweb', 'aeza', 'firstbyte', 'myarena', 'beget', 'reg.ru', 'mchost', 
     'activecloud', 'inferno', 'firstvds', 'vdsina', 'clouvider',
+    'alibaba', 'tencent', 'oracle', 'ibm cloud', 'scaleway', 'kamatera',
     
-    // === ТЕ, КТО СКРЫВАЕТСЯ ПОД РЕЗИДЕНТОВ (Твоя проблема с PacketHub тут) ===
-    'packethub',      // 🚨 Тот самый "невидимка" из США
-    'cdn77',          // Часто идет в паре с PacketHub
-    'datacamp',       // Datacamp Limited (CDN77)
-    'm247',           // Огромный VPN провайдер
-    'performive',     // Хостинг
-    'tzulo',          // Хостинг
-    'psychz',         // Хостинг
-    'choopa',         // Vultr
-    'creanova',       // Хостинг
-    'pfcloud',        // Хостинг
-    
-    // === КЛЮЧЕВЫЕ СЛОВА (Оставляем только самые явные) ===
-    'waicore', 'akamai', 'servers tech', 'reliable site', 'alibaba', 
-    'oracle', 'ipxo', 'cloudinow', 'arvancloud', 'cogent', 'frantech',
-    'buyvm', 'colocrossing', 'bluehost', 'unified layer', 'total server',
-    'fly servers', 'profit server', 'mevspace', 'pq hosting', 'smartape',
-    'host key', 'quadranet', 'global layer',
-    
-    // === ОПАСНЫЕ ОБЩИЕ СЛОВА (Включаем, так как они в ISP = 99% бот) ===
-    'vpn',            // Если провайдер называется "...VPN" - это не живой человек
-    'hosting',        // Живые люди не сидят с хостинга
-    'data center',    // Очевидно
-    'dedicated'       // Выделенные серверы
-    // Слово 'server' я убрал, чтобы ты был спокоен, хотя 'servers tech' и 'total server' остались.
+    // === НОВЫЕ ИЗ ТВОЕГО ЛОГА (Хостинги) ===
+    'reliablesite',   // ReliableSite.Net LLC
+    'namecheap',      // Namecheap, Inc.
+    'godaddy',        // GoDaddy.com, LLC
+    'ionos',          // IONOS SE
+    'cloudflare',     // Cloudflare, Inc.
+    'internet names', // Internet Names For Business
+    'tierpoint',      // TierPoint (Дата-центр)
+    'gigahost',       // Gigahost
+    'green floid',    // Green Floid LLC (Хостинг)
+
+    // === ВРЕДНЫЕ СЕТИ ===
+    'packethub', 'cdn77', 'datacamp', 'm247', 'performive', 'tzulo', 
+    'psychz', 'choopa', 'creanova', 'pfcloud', 'quadranet', 'colocrossing', 
+    'buyvm', 'frantech', 'cogent', 'terrahost', 'ip volume', 'ipvolume', 
+    'servers.com', 'servers tech',
+
+    // === ГЕО И МУСОР ===
+    'chinanet', 'china unicom', 'china mobile', // Китай (9000ms+ нам не надо)
+    'tor exit', 'tor node', 
+    'opera', 'opera software',
+    'zscaler', // Если хочешь убрать корпоративные шлюзы (их было много) - раскомментируй. Но они быстрые.
+   
+    // === СТОП-СЛОВА ===
+    'vpn', 'hosting', 'data center', 'dedicated', 'cdn', 'vps'
 ];
+
 
 let PROXIES_RU = [];
 let PROXIES_GLOBAL = [];
