@@ -1,32 +1,17 @@
 # =======================================================
-# 1. 💎 RU SPECIAL (RU Only)
+# ✅ LIVE SOURCES (Verified 21.01.2026 04:24 MSK)
 # =======================================================
-https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/country/RU.txt
-https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/proxies-country/RU.txt
 
-# =======================================================
-# 2. 🔥 TOP TIER SOCKS5 (Stable)
-# =======================================================
-# Monosans (Всегда работает)
-https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt
-# Hookzof (Классика)
-https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
-# Vakhov (Свежие)
-https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks5.txt
-# Zloi-User (Микс)
-https://raw.githubusercontent.com/zloi-user/hideip.me/main/socks5.txt
-
-# =======================================================
-# 3. 📦 MASSIVE DUMPS (Большие списки)
-# =======================================================
-# TheSpeedX (SOCKS-List - ТОЛЬКО ЭТА ССЫЛКА РАБОЧАЯ)
+# 1. TheSpeedX (Жив, 1500+ IP)
 https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt
 https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt
 
-# =======================================================
-# 4. 🌐 HTTP BACKUP (Для объема)
-# =======================================================
+# 2. Hookzof (Жив, 200+ IP)
+https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
+
+# 3. Monosans (Только общие списки, country/ МЕРТВА)
+https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt
 https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt
-https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/http.txt
-# Proxifly (Через CDN - так надежнее)
+
+# 4. Proxifly (Через CDN)
 https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.txt
