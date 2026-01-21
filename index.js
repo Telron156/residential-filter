@@ -170,11 +170,11 @@ async function checkResidential(rawLine) {
     
     if (rawLine.includes('socks')) {
         // Если в источнике указано socks - проверяем 5 и 4 (многие путают)
-        candidates = ['socks5', 'socks4'];
+        candidates = ['socks5'];
     } else {
         // Если указано http или ничего - проверяем ВСЁ.
         // Часто socks4/5 лежат в списках http.
-        candidates = ['http', 'socks5', 'socks4'];
+        candidates = ['http', 'socks5'];
     }
 
     let winner = null;
