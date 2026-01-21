@@ -5,291 +5,252 @@ const axios = require('axios');
 const { HttpProxyAgent } = require('http-proxy-agent');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
-const https = require('https'); // Нужно для настройки агента
+const https = require('https');
 
-// ===================== НАСТРОЙКИ (V6.5 HTTPS ELITE) =====================
+// ===================== НАСТРОЙКИ (V6.8 STABLE) =====================
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
 
-// Тайм-аут 
-const TIMEOUT_MS = 12000; 
-// 200 потоков
-const THREADS = 200;
+const TIMEOUT_MS = 10000;
+const THREADS = 250; 
 
-// 1. HARD BAN ПОДCЕТЕЙ (Защита от Cogent/ColoCrossing/DataCenters)
+// 1. HARD BAN
 const BANNED_RANGES = [
-    /^154\.3\./,      // Cogent
-    /^38\.154\./,     // Cogent
-    /^192\.145\./,    // ColoCrossing
-    /^23\.148\./,     // ColoCrossing
-    /^198\.12\./,     // ColoCrossing
-    /^146\.235\./,    // Redwillow
-    /^104\.129\./,    // FranTech
-    /^198\.98\./,     // FranTech
-    /^107\.17\./      // ColoCrossing
+    /^154\.3\./, /^38\.154\./, /^192\.145\./, /^23\.148\./, 
+    /^198\.12\./, /^146\.235\./, /^104\.129\./, /^198\.98\./, /^107\.17\./
 ];
 
-// 2. ЧЕРНЫЙ СПИСОК ASN
+// 2. ASN BAN
 const CRITICAL_ASNS = [
-    'AS174',   // Cogent
-    'AS9009',  // M247
-    'AS14061', // DigitalOcean
-    'AS16509', 'AS14618', // Amazon
-    'AS24940', // Hetzner
-    'AS16276', 'AS12876', // OVH
-    'AS15169', 'AS396982', // Google
-    'AS45102', // Alibaba
-    'AS132203', 'AS45090', // Tencent
-    'AS8075',  // Microsoft Azure
-    'AS53667', // FranTech
-    'AS36352', // ColoCrossing
-    'AS46606'  // Unified Layer
+    'AS174', 'AS9009', 'AS14061', 'AS16509', 'AS14618', 'AS24940',
+    'AS16276', 'AS12876', 'AS15169', 'AS396982', 'AS45102', 'AS132203',
+    'AS45090', 'AS8075', 'AS53667', 'AS36352', 'AS46606'
 ];
 
-// 3. ЧЕРНЫЙ СПИСОК БРЕНДОВ
+// 3. ISP BAN
 const BAD_WORDS = [
-    'waicore', 'akamai', 'servers tech', 'reliable', 
-    'alibaba', 'datacamp', 'oracle', 'ipxo',
-    'cloudinow', 'arvancloud',
-    'cogent', 'frantech', 'buyvm', 'colocrossing', 'bluehost', 'unified layer',
-    'total server', 'digitalocean', 'hetzner', 'ovh', 'linode', 'vultr', 
-    'contabo', 'leaseweb', 'hostinger', 'selectel', 'timeweb', 'aeza', 
-    'firstbyte', 'myarena', 'beget', 'reg.ru', 'mchost', 'fly servers', 
-    'profit server', 'mevspace', 'pq hosting', 'smartape', 'firstvds'
+    'waicore', 'akamai', 'servers tech', 'reliable', 'alibaba', 'datacamp',
+    'oracle', 'ipxo', 'cloudinow', 'arvancloud', 'cogent', 'frantech',
+    'buyvm', 'colocrossing', 'bluehost', 'unified layer', 'total server',
+    'digitalocean', 'hetzner', 'ovh', 'linode', 'vultr', 'contabo',
+    'leaseweb', 'hostinger', 'selectel', 'timeweb', 'aeza', 'firstbyte',
+    'myarena', 'beget', 'reg.ru', 'mchost', 'fly servers', 'profit server',
+    'mevspace', 'pq hosting', 'smartape', 'firstvds'
 ];
 
-// Разделяем хранение
 let PROXIES_RU = [];
 let PROXIES_GLOBAL = [];
 
-const sourceLoader = axios.create({ timeout: 15000 });
+const sourceLoader = axios.create({ timeout: 15000, httpsAgent: new https.Agent({ rejectUnauthorized: false }) });
 
-// === [FIX] ОБНОВЛЕННЫЙ AXIOS ДЛЯ ПРОВЕРКИ HTTPS ===
 const http = axios.create({
     proxy: false,
     timeout: TIMEOUT_MS,
-    // Принимаем только 200 (ОК) и 403 (Капча Яндекса - значит достучались)
-    // Остальные (500, 502, 407, 405) считаем ошибкой
-    validateStatus: (status) => {
-        return status === 200 || status === 403;
-    },
+    validateStatus: () => true, 
     headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
     },
-    // Важно: Игнорируем ошибки SSL сертификатов самого прокси, 
-    // но при этом проверяем возможность установки HTTPS соединения
+    maxRedirects: 5,
     httpsAgent: new https.Agent({ rejectUnauthorized: false })
 });
 
 function saveAndExit() {
-    console.log('\n💾 СОХРАНЕНИЕ РЕЗУЛЬТАТОВ (HTTPS READY)...');
-    
-    const finalChain = [...new Set(PROXIES_RU), ...new Set(PROXIES_GLOBAL)];
-    const uniqueFinal = [...new Set(finalChain)];
-
-    if (uniqueFinal.length > 0) {
-        fs.writeFileSync(OUTPUT_FILE, uniqueFinal.join('\n'));
-        console.log(`✅ [TOTAL] Сохранено: ${uniqueFinal.length} шт. -> ${OUTPUT_FILE}`);
-        console.log(`   ├─ 🇷🇺 RU: ${PROXIES_RU.length}`);
-        console.log(`   └─ 🌍 Other: ${PROXIES_GLOBAL.length}`);
-    } else { 
-        console.log('⚠️ Нет рабочих прокси.'); 
-    }
-    
+    console.log('\n💾 СОХРАНЕНИЕ...');
+    // Удаляем дубликаты
+    const unique = [...new Set([...PROXIES_RU, ...PROXIES_GLOBAL])];
+    if (unique.length > 0) {
+        fs.writeFileSync(OUTPUT_FILE, unique.join('\n'));
+        console.log(`✅ TOTAL: ${unique.length} (🇷🇺 ${PROXIES_RU.length} | 🌍 ${PROXIES_GLOBAL.length})`);
+    } else { console.log('⚠️ Пусто.'); }
     process.exit(0);
 }
-
 process.on('SIGINT', saveAndExit);
 process.on('SIGTERM', saveAndExit);
 
-function buildAgents(proxyUrl) {
+function getAgents(protocol, host, port) {
+    const proxyUrl = `${protocol}://${host}:${port}`;
     try {
-        const opts = { keepAlive: false };
-        if (proxyUrl.startsWith('socks')) {
+        const opts = { keepAlive: false, timeout: TIMEOUT_MS };
+        if (protocol.startsWith('socks')) {
             const agent = new SocksProxyAgent(proxyUrl, { ...opts, resolveProxy: true });
-            return { http: agent, https: agent, cleanup: () => {} };
+            return { http: agent, https: agent };
+        } else {
+            return { 
+                http: new HttpProxyAgent(proxyUrl, opts),
+                https: new HttpsProxyAgent(proxyUrl, opts)
+            };
         }
-        const h = new HttpProxyAgent(proxyUrl, opts);
-        const hs = new HttpsProxyAgent(proxyUrl, opts);
-        return { http: h, https: hs, cleanup: () => { h.destroy(); hs.destroy(); } };
     } catch { return null; }
 }
 
-// === [FIX] ПРОВЕРКА СТРОГО HTTPS ===
 async function checkWithProtocol(host, port, protocol) {
-    const proxyUrl = `${protocol}://${host}:${port}`;
-    const agents = buildAgents(proxyUrl);
-    if (!agents) throw new Error('Agent Fail');
-    
+    const agents = getAgents(protocol, host, port);
+    if (!agents) throw new Error('Agent Error');
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
     try {
         const start = Date.now();
-        
-        // Запрос строго на HTTPS. Если прокси не поддерживает CONNECT - упадет с ошибкой.
-        const response = await http.get('https://ya.ru', {
+        const res = await http.get('https://ya.ru', {
             httpAgent: agents.http,
-            httpsAgent: agents.https, // Используется для HTTPS
-            signal: controller.signal
+            httpsAgent: agents.https,
+            signal: controller.signal,
+            responseType: 'text'
         });
 
-        // [FIX] Защита от "Фейковых 200"
-        // Некоторые прокси отдают код 200, но возвращают страницу логина провайдера или заглушку.
-        // Главная Яндекса обычно весит больше 500 байт.
-        const dataLength = response.data ? String(response.data).length : 0;
-        if (response.status === 200 && dataLength < 500) {
-            throw new Error('Fake 200 Response (Too short)');
+        const latency = Date.now() - start;
+
+        if (res.status !== 200 && res.status !== 403) {
+            throw new Error(`Bad Status: ${res.status}`);
         }
 
-        const latency = Date.now() - start;
+        if (res.status === 200) {
+            const body = String(res.data || '').toLowerCase();
+            if (body.length < 300) throw new Error('Too Short');
+            const isYandex = body.includes('yandex') || body.includes('яндекс') || body.includes('dzen') || body.includes('captcha') || body.includes('sso');
+            if (!isYandex) throw new Error('Fake Content');
+        }
+
         return { protocol, latency, agents };
     } catch (e) {
-        if (agents.cleanup) agents.cleanup();
+        if(agents.http && agents.http.destroy) agents.http.destroy();
+        if(agents.https && agents.https.destroy) agents.https.destroy();
         throw e;
     } finally {
-        clearTimeout(timeoutId);
+        clearTimeout(timeout);
     }
 }
 
 async function checkResidential(rawLine) {
-    const clean = rawLine.replace(/^(http|https|socks4|socks5|socks5h):\/\//, '').trim();
-    if (!clean || clean.length < 5) return;
-    const parts = clean.split(':');
-    if (parts.length < 2) return;
-    const port = parts.pop();
-    const host = parts.join(':');
+    let clean = rawLine.trim();
+    if (clean.length < 5) return;
 
-    // 0. HARD BAN (IP Ranges)
-    if (BANNED_RANGES.some(regex => regex.test(host))) return;
+    let protocolHint = null;
+    if (clean.includes('://')) {
+        const split = clean.split('://');
+        protocolHint = split[0].toLowerCase();
+        clean = split[1];
+    }
 
-    // === [FIX] УЛУЧШЕННЫЙ ВЫБОР КАНДИДАТОВ ===
+    const lastColonIndex = clean.lastIndexOf(':');
+    if (lastColonIndex === -1) return;
+
+    const port = clean.substring(lastColonIndex + 1);
+    const host = clean.substring(0, lastColonIndex);
+
+    if (!host.includes('@') && BANNED_RANGES.some(r => r.test(host))) return;
+
     let candidates = [];
-    
-    if (rawLine.includes('socks')) {
-        // Если в источнике указано socks - проверяем 5 и 4 (многие путают)
-        candidates = ['socks5'];
+    if (protocolHint) {
+        if (protocolHint.startsWith('socks4')) return; 
+        if (protocolHint.startsWith('socks')) candidates = ['socks5'];
+        else candidates = ['http']; 
     } else {
-        // Если указано http или ничего - проверяем ВСЁ.
-        // Часто socks4/5 лежат в списках http.
         candidates = ['http', 'socks5'];
     }
 
     let winner = null;
     try {
-        // Гонка протоколов: кто первый успешно откроет HTTPS Яндекс
         winner = await Promise.any(candidates.map(p => checkWithProtocol(host, port, p)));
     } catch { return; }
 
     const { protocol, latency, agents } = winner;
 
     try {
-        // Проверка ГЕО (Хостинг/Мобайл)
-        // Тут оставляем http, так как API может быть без https, нам главное инфу получить
-        const infoRes = await http.get('http://ip-api.com/json/?fields=status,countryCode,isp,org,as,mobile,proxy,hosting', {
+        const info = await http.get('http://ip-api.com/json/?fields=status,countryCode,isp,org,as,mobile,hosting', {
             httpAgent: agents.http,
             httpsAgent: agents.https,
-            timeout: 10000 // Чуть больше времени на ГЕО
+            timeout: 8000
         });
 
-        const data = infoRes.data || {};
-        if (data.status !== 'success') return;
+        const d = info.data || {};
+        if (d.status !== 'success') return;
 
-        const isp = String(data.isp || '').toLowerCase();
-        const org = String(data.org || '').toLowerCase();
-        const asInfo = String(data.as || '');
+        const ispFull = `${d.isp || ''} ${d.org || ''} ${d.as || ''}`.toLowerCase();
+        if (CRITICAL_ASNS.some(a => ispFull.includes(a.toLowerCase()))) return;
+        if (BAD_WORDS.some(w => ispFull.includes(w))) return;
 
-        // 1. ASN BAN
-        if (CRITICAL_ASNS.some(bad => asInfo.includes(bad))) return;
-
-        // 2. BRAND BAN
-        const isBadBrand = BAD_WORDS.some(w => 
-            isp.includes(w) || org.includes(w) || asInfo.toLowerCase().includes(w)
-        );
-        if (isBadBrand) return;
-
-        // ВЫВОД
-        const isRu = data.countryCode === 'RU';
-        const icon = latency < 1500 ? '🚀' : '🐢';
-        const type = data.mobile ? '📱 MOB' : (data.hosting ? '🏢 BIZ' : '🏠 HOME');
-        const flag = isRu ? '🇷🇺 RU' : data.countryCode;
+        const isRu = d.countryCode === 'RU';
+        const type = d.mobile ? '📱' : (d.hosting ? '🏢' : '🏠');
         
-        console.log(`✅ ADDED | ${flag} | ${type} | ${icon} ${latency}ms | [${protocol.toUpperCase()}] ${data.isp.substring(0, 20)}`);
-        
-        // Важно: сохраняем с правильным протоколом
-        const validProxy = `${protocol}://${host}:${port}`;
-        
-        if (isRu) {
-            PROXIES_RU.push(validProxy);
-        } else {
-            PROXIES_GLOBAL.push(validProxy);
-        }
+        console.log(`✅ [${protocol.toUpperCase()}] ${d.countryCode} ${type} ${latency}ms | ${(d.isp || '').substring(0, 25)}`);
 
-    } catch (e) { return; } 
-    finally { if (agents.cleanup) agents.cleanup(); }
-}
+        const res = `${protocol}://${host}:${port}`;
+        (isRu ? PROXIES_RU : PROXIES_GLOBAL).push(res);
 
-async function mapWithConcurrency(items, concurrency, workerFn) {
-    const results = [];
-    let idx = 0;
-    const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-        while (idx < items.length) {
-            const i = idx++;
-            await workerFn(items[i]);
-        }
-    });
-    await Promise.all(workers);
-}
-
-function parseAndAdd(text, setCollection) {
-    text.split(/\r?\n/).forEach(l => {
-        const m = l.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)/);
-        if (m) {
-            // Если в строке есть явный протокол - берем его, если нет - просто IP:PORT
-            let p = m[0];
-            if (l.includes('socks5://')) p = 'socks5://' + m[0];
-            else if (l.includes('socks4://')) p = 'socks4://' + m[0];
-            else if (l.includes('http://')) p = 'http://' + m[0];
-            // Если протокола нет, checkResidential сам переберет все варианты
-            setCollection.add(p);
-        }
-    });
-}
-
-async function loadSources() {
-    if (!fs.existsSync(SOURCES_FILE)) return [];
-    const rawLines = fs.readFileSync(SOURCES_FILE, 'utf-8')
-        .split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
-    console.log(`📡 Sources: ${rawLines.length}`);
-    const all = new Set();
-    const urlTasks = [];
-    for (const line of rawLines) {
-        if (line.startsWith('http')) {
-            urlTasks.push(sourceLoader.get(line).then(r => {
-                const txt = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
-                parseAndAdd(txt, all);
-            }).catch(() => {}));
-        } else { parseAndAdd(line, all); }
+    } catch (e) { 
+    } finally {
+        if(agents.http && agents.http.destroy) agents.http.destroy();
+        if(agents.https && agents.https.destroy) agents.https.destroy();
     }
-    if (urlTasks.length > 0) await Promise.all(urlTasks);
-    return Array.from(all);
+}
+
+async function runner(items) {
+    const chunk = [...items];
+    let active = 0;
+    return new Promise(resolve => {
+        const next = () => {
+            if (chunk.length === 0 && active === 0) return resolve();
+            while (active < THREADS && chunk.length > 0) {
+                active++;
+                const item = chunk.shift();
+                checkResidential(item).finally(() => {
+                    active--;
+                    next();
+                });
+            }
+        };
+        next();
+    });
 }
 
 async function main() {
-    console.log('--- PROXY CHECKER (V6.5 HTTPS ELITE) ---\n');
-    const raw = await loadSources();
-    if(raw.length===0) return;
-    const unique = [...new Set(raw)];
-    console.log(`📥 Candidates: ${unique.length} | Threads: ${THREADS} | Timeout: ${TIMEOUT_MS}ms`);
+    console.log('--- SCANNER V6.8 STABLE ---');
+    if (!fs.existsSync(SOURCES_FILE)) {
+        console.log(`❌ Файл ${SOURCES_FILE} не найден!`);
+        return;
+    }
     
-    // Тайм-аут на всю работу (чтобы не висеть вечно)
-    const t = setTimeout(() => { console.log('HARD TIMEOUT'); saveAndExit(); }, 60*60000); // 1 час
+    const lines = fs.readFileSync(SOURCES_FILE, 'utf-8').split(/\r?\n/);
+    const set = new Set();
     
-    await mapWithConcurrency(unique, THREADS, checkResidential);
-    clearTimeout(t);
+    for (const l of lines) {
+        const trimmed = l.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+
+        if (trimmed.startsWith('http') && !trimmed.match(/\s/) && !trimmed.match(/\d:\d/)) {
+            try {
+                console.log(`Скачиваю: ${trimmed.substring(0,40)}...`);
+                const r = await sourceLoader.get(trimmed);
+                const text = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
+                
+                // [FIX] Защита от парсинга HTML мусора. Берем только строки похожие на IP:PORT
+                text.split(/\r?\n/).forEach(proxyLine => {
+                    const clean = proxyLine.trim();
+                    // Валидация: должна быть хотя бы одна цифра, двоеточие, и длина > 6
+                    if (clean.length > 6 && clean.includes(':') && /\d/.test(clean)) {
+                        set.add(clean);
+                    }
+                });
+            } catch (e) { console.log(`Ошибка источника: ${e.message}`); }
+        } else {
+             // Валидация локальных строк тоже не помешает
+             if (trimmed.length > 6 && trimmed.includes(':')) {
+                set.add(trimmed);
+             }
+        }
+    }
+
+    const tasks = Array.from(set);
+    console.log(`\n🔎 ЗАДАЧА: ${tasks.length} адресов. Старт через 2 сек...`);
+    await new Promise(r => setTimeout(r, 2000));
+    
+    await runner(tasks);
     saveAndExit();
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+main().catch(e => {
+    console.error('FATAL ERROR:', e);
+    process.exit(1);
+});
