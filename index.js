@@ -27,7 +27,7 @@ const CRITICAL_ASNS = [
     'AS45090', 'AS8075', 'AS53667', 'AS36352', 'AS46606'
 ];
 
-// 3. ISP BAN (V7.7 - PATCHED AFTER MINING)
+// 3. ISP BAN (V8.2 - RESELLER PATCH)
 const BAD_WORDS = [
     // === ГИГАНТЫ ХОСТИНГА ===
     'amazon', 'google cloud', 'azure', 'digitalocean', 'hetzner', 'ovh', 
@@ -39,14 +39,13 @@ const BAD_WORDS = [
     // === ТОКСИЧНЫЕ, НАЙДЕННЫЕ В ЛОГАХ ===
     'waicore',        // Слишком много, часто детектится
     'emerald onion',  // 🚨 TOR Exit Node
-    'emerald',        // На всякий случай
     'datawagon',      // Хостинг
     'g-core',         // CDN/Hosting
     'gcore',          // CDN/Hosting
     'cloud assets',   // Хостинг
-    'jsc iot',        // Скорее всего серверные IoT шлюзы
-    'serv.host',      // Хостинг (видно в логе GB)
-    'oc networks',    // Хостинг (видно в логе EE)
+    'jsc iot',        // IoT шлюзы
+    'serv.host',      // Хостинг
+    'oc networks',    // Хостинг
 
     // === ПРЕДЫДУЩИЕ УСПЕШНЫЕ ФИЛЬТРЫ ===
     'reliablesite', 'namecheap', 'godaddy', 'ionos', 'cloudflare', 
@@ -58,12 +57,32 @@ const BAD_WORDS = [
 
     // === ГЕО И МУСОР ===
     'chinanet', 'china unicom', 'china mobile', 
-    'tor exit', 'tor node', 'onion', // Добавил onion отдельно
+    'tor exit', 'tor node', 'onion', 
     'opera', 'opera software',
     'zscaler', 
     
     // === СТОП-СЛОВА ===
-    'vpn', 'hosting', 'data center', 'dedicated', 'cdn', 'vps'
+    'vpn', 'hosting', 'data center', 'dedicated', 'cdn', 'vps',
+
+    // === НОВЫЕ (ПАТЧ ИЗ ТВОИХ ЛОГОВ - УТОЧНЕННЫЕ) ===
+    'webnx',            // Хостинг
+    'tier.net',         // Хостинг
+    'hostpapa',         // Хостинг
+    'coloup',           // Хостинг
+    'worktitans',       // Хостинг
+    'wholesale internet', // Исправлено (полное название)
+    'llc horizon',      // Исправлено (RU хостинг)
+    'llc "horizon"',    
+    'radist ltd',       // Исправлено (точное название)
+    'hnns',         
+    'tyo1',             // Тег датацентра
+    'sgp1',             // Тег датацентра
+    'digital energy',
+    'fozzy', 'zomro', 'pq hosting',
+    
+    // === РЕСЕЛЛЕРЫ (ИМЕННЫЕ ПОДСЕТИ) ===
+    'baykov',           // Baykov Ilya Sergeevich
+    'mulgin'            // Mulgin Alexander Sergeevich
 ];
 
 let PROXIES_RU = [];
