@@ -7,11 +7,12 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 const https = require('https');
 
-// ===================== НАСТРОЙКИ (V6.8.1 PRIORITIZED) =====================
+// ===================== НАСТРОЙКИ (V8.5 ULTIMATE) =====================
 const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
 
 const TIMEOUT_MS = 10000;
+// Снизили до 200, так как двойная проверка нагружает event loop сильнее
 const THREADS = 200; 
 
 // 1. HARD BAN
@@ -27,26 +28,64 @@ const CRITICAL_ASNS = [
     'AS45090', 'AS8075', 'AS53667', 'AS36352', 'AS46606'
 ];
 
-// 3. ISP BAN
+// 3. ISP BAN (V8.2 - RESELLER PATCH)
 const BAD_WORDS = [
+    // === ГИГАНТЫ ХОСТИНГА ===
     'amazon', 'google cloud', 'azure', 'digitalocean', 'hetzner', 'ovh', 
     'linode', 'vultr', 'contabo', 'leaseweb', 'hostinger', 'selectel', 
     'timeweb', 'aeza', 'firstbyte', 'myarena', 'beget', 'reg.ru', 'mchost', 
     'activecloud', 'inferno', 'firstvds', 'vdsina', 'clouvider',
     'alibaba', 'tencent', 'oracle', 'ibm cloud', 'scaleway', 'kamatera',
-    'waicore', 'emerald onion', 'datawagon', 'g-core', 'gcore', 'cloud assets', 
-    'jsc iot', 'serv.host', 'oc networks', 'reliablesite', 'namecheap', 
-    'godaddy', 'ionos', 'cloudflare', 'internet names', 'tierpoint', 
-    'gigahost', 'green floid', 'packethub', 'cdn77', 'datacamp', 'm247', 
-    'performive', 'tzulo', 'psychz', 'choopa', 'creanova', 'pfcloud', 
-    'quadranet', 'colocrossing', 'buyvm', 'frantech', 'cogent', 'terrahost', 
-    'ip volume', 'ipvolume', 'servers.com', 'servers tech', 'chinanet', 
-    'china unicom', 'china mobile', 'tor exit', 'tor node', 'onion', 
-    'opera', 'opera software', 'zscaler', 'vpn', 'hosting', 'data center', 
-    'dedicated', 'cdn', 'vps', 'webnx', 'tier.net', 'hostpapa', 'coloup', 
-    'worktitans', 'wholesale internet', 'llc horizon', 'llc "horizon"', 
-    'radist ltd', 'hnns', 'tyo1', 'sgp1', 'digital energy', 'fozzy', 
-    'zomro', 'pq hosting', 'baykov', 'mulgin', 'reznichenko'
+    
+    // === ТОКСИЧНЫЕ, НАЙДЕННЫЕ В ЛОГАХ ===
+    'waicore',        // Слишком много, часто детектится
+    'emerald onion',  // 🚨 TOR Exit Node
+    'datawagon',      // Хостинг
+    'g-core',         // CDN/Hosting
+    'gcore',          // CDN/Hosting
+    'cloud assets',   // Хостинг
+    'jsc iot',        // IoT шлюзы
+    'serv.host',      // Хостинг
+    'oc networks',    // Хостинг
+
+    // === ПРЕДЫДУЩИЕ УСПЕШНЫЕ ФИЛЬТРЫ ===
+    'reliablesite', 'namecheap', 'godaddy', 'ionos', 'cloudflare', 
+    'internet names', 'tierpoint', 'gigahost', 'green floid',
+    'packethub', 'cdn77', 'datacamp', 'm247', 'performive', 'tzulo', 
+    'psychz', 'choopa', 'creanova', 'pfcloud', 'quadranet', 'colocrossing', 
+    'buyvm', 'frantech', 'cogent', 'terrahost', 'ip volume', 'ipvolume', 
+    'servers.com', 'servers tech',
+
+    // === ГЕО И МУСОР ===
+    'chinanet', 'china unicom', 'china mobile', 
+    'tor exit', 'tor node', 'onion', 
+    'opera', 'opera software',
+    'zscaler', 
+    
+    // === СТОП-СЛОВА ===
+    'vpn', 'hosting', 'data center', 'dedicated', 'cdn', 'vps',
+
+    // === НОВЫЕ (ПАТЧ ИЗ ТВОИХ ЛОГОВ - УТОЧНЕННЫЕ) ===
+    'webnx',            // Хостинг
+    'tier.net',         // Хостинг
+    'hostpapa',         // Хостинг
+    'coloup',           // Хостинг
+    'worktitans',       // Хостинг
+    'wholesale internet', // Исправлено (полное название)
+    'llc horizon',      // Исправлено (RU хостинг)
+    'llc "horizon"',    
+    'radist ltd',       // Исправлено (точное название)
+    'hnns',         
+    'tyo1',             // Тег датацентра
+    'sgp1',             // Тег датацентра
+    'digital energy',
+    'fozzy', 'zomro', 'pq hosting',
+    
+    // === РЕСЕЛЛЕРЫ (ИМЕННЫЕ ПОДСЕТИ) ===
+    'baykov',           // Baykov Ilya Sergeevich
+    'mulgin',           // Mulgin Alexander Sergeevich
+    'miglovets',        // Miglovets Egor Andreevich
+    'reznichenko'       // Reznichenko Sergey Mykolayovich
 ];
 
 // Массивы для разделения по приоритетам
@@ -148,13 +187,9 @@ async function checkResidential(rawLine) {
     let clean = rawLine.trim();
     if (clean.length < 5) return;
 
-    // Парсим строку, чтобы отделить IP:PORT от протокола
-    // Но сам протокол (protocolHint) больше не влияет на выбор проверки
-    let protocolHint = null;
+    // Парсим только для IP:PORT, протокол игнорируем
     if (clean.includes('://')) {
-        const split = clean.split('://');
-        protocolHint = split[0].toLowerCase();
-        clean = split[1];
+        clean = clean.split('://')[1];
     }
 
     const lastColonIndex = clean.lastIndexOf(':');
@@ -165,15 +200,11 @@ async function checkResidential(rawLine) {
 
     if (!host.includes('@') && BANNED_RANGES.some(r => r.test(host))) return;
 
-    // ==================== ИЗМЕНЕНИЕ ====================
-    // Принудительно проверяем оба протокола для каждого адреса.
-    // Это найдет SOCKS5, даже если он был ошибочно помечен как HTTP.
+    // ВСЕГДА проверяем оба протокола (гарантия нахождения SOCKS5)
     let candidates = ['http', 'socks5'];
-    // ===================================================
 
     let winner = null;
     try {
-        // Запускаем гонку: кто первый ответит (HTTP или SOCKS5), тот и победил
         winner = await Promise.any(candidates.map(p => checkWithProtocol(host, port, p)));
     } catch { return; }
 
@@ -198,9 +229,10 @@ async function checkResidential(rawLine) {
         
         console.log(`✅ [${protocol.toUpperCase()}] ${d.countryCode} ${typeIcon} ${latency}ms | ${(d.isp || '').substring(0, 25)}`);
 
-        // Сохраняем с ТЕМ протоколом, который реально сработал (winner.protocol)
+        // Сохраняем с ТЕМ протоколом, который реально сработал
         const res = `${protocol}://${host}:${port}`;
         
+        // Строгая сортировка по папкам
         if (isRu) {
             if (d.mobile) PROXIES_RU_MOBILE.push(res);
             else PROXIES_RU_OTHER.push(res);
@@ -236,7 +268,7 @@ async function runner(items) {
 }
 
 async function main() {
-    console.log('--- SCANNER V6.8.1 PRIORITIZED ---');
+    console.log('--- SCANNER V8.5 ULTIMATE (PRIORITY + DOUBLE CHECK) ---');
     if (!fs.existsSync(SOURCES_FILE)) {
         console.log(`❌ Файл ${SOURCES_FILE} не найден!`);
         return;
