@@ -83,6 +83,7 @@ const BAD_WORDS = [
     // === РЕСЕЛЛЕРЫ (ИМЕННЫЕ ПОДСЕТИ) ===
     'baykov',           // Baykov Ilya Sergeevich
     'mulgin'            // Mulgin Alexander Sergeevich
+    'reznichenko'       // Reznichenko Sergey Mykolayovich
 ];
 
 let PROXIES_RU = [];
