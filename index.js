@@ -12,7 +12,7 @@ const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt';
 
 const TIMEOUT_MS = 10000;
-const THREADS = 250; 
+const THREADS = 200; 
 
 // 1. HARD BAN
 const BANNED_RANGES = [
@@ -148,6 +148,8 @@ async function checkResidential(rawLine) {
     let clean = rawLine.trim();
     if (clean.length < 5) return;
 
+    // Парсим строку, чтобы отделить IP:PORT от протокола
+    // Но сам протокол (protocolHint) больше не влияет на выбор проверки
     let protocolHint = null;
     if (clean.includes('://')) {
         const split = clean.split('://');
@@ -163,10 +165,15 @@ async function checkResidential(rawLine) {
 
     if (!host.includes('@') && BANNED_RANGES.some(r => r.test(host))) return;
 
-    let candidates = protocolHint ? (protocolHint.startsWith('socks') ? ['socks5'] : ['http']) : ['http', 'socks5'];
+    // ==================== ИЗМЕНЕНИЕ ====================
+    // Принудительно проверяем оба протокола для каждого адреса.
+    // Это найдет SOCKS5, даже если он был ошибочно помечен как HTTP.
+    let candidates = ['http', 'socks5'];
+    // ===================================================
 
     let winner = null;
     try {
+        // Запускаем гонку: кто первый ответит (HTTP или SOCKS5), тот и победил
         winner = await Promise.any(candidates.map(p => checkWithProtocol(host, port, p)));
     } catch { return; }
 
@@ -191,9 +198,9 @@ async function checkResidential(rawLine) {
         
         console.log(`✅ [${protocol.toUpperCase()}] ${d.countryCode} ${typeIcon} ${latency}ms | ${(d.isp || '').substring(0, 25)}`);
 
+        // Сохраняем с ТЕМ протоколом, который реально сработал (winner.protocol)
         const res = `${protocol}://${host}:${port}`;
         
-        // Распределение по приоритетным массивам
         if (isRu) {
             if (d.mobile) PROXIES_RU_MOBILE.push(res);
             else PROXIES_RU_OTHER.push(res);
