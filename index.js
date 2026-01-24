@@ -82,7 +82,7 @@ const BAD_WORDS = [
     'fozzy', 'zomro', 'pq hosting',
 
     // Блокировка Yandex Cloud
-    'yandex', 'yandex cloud', 'yandex.cloud', 'yandex llc'
+    'yandex', 'yandex cloud', 'yandex.cloud', 'yandex llc',
     
     // === РЕСЕЛЛЕРЫ (ИМЕННЫЕ ПОДСЕТИ) ===
     'baykov',           // Baykov Ilya Sergeevich
