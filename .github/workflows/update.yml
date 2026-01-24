@@ -1,8 +1,8 @@
 name: Proxy Check & Update
 
 on:
-  schedule:
-    - cron: '0 */2 * * *'  # Запуск каждые 2 часа
+   # schedule:
+   #  - cron: '0 */2 * * *'  # Запуск каждые 2 часа
   workflow_dispatch:       # Кнопка ручного запуска
 
 permissions:
