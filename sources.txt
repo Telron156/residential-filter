@@ -1,69 +1,77 @@
 # =======================================================
-# 1. 💎 FRESH & UNIQUE (Новые и качественные)
+# 1. 🏆 ELITE & GOLD STANDARD (Самое высокое качество)
+# Эти списки самые чистые, SOCKS5, минимум мусора.
 # =======================================================
-# UrielChaves (Чистый SOCKS5)
+# RoosterKid (Эталон RAW прокси)
+https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt
+
+# UrielChaves (Очень чистый SOCKS5)
 https://raw.githubusercontent.com/UrielChaves/Nodes/main/socks5.txt
 
-# Zloi-User (Вы воскресили этот источник, отличная работа!)
+# Monosans (Самый надежный источник, обновляется часто)
+https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt
+https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt
+
+# =======================================================
+# 2. 🚀 FRESH & ACTIVE (Частые обновления)
+# Источники с высокой частотой апдейтов.
+# =======================================================
+# Zloi-User (Отличный микс, живой источник)
 https://raw.githubusercontent.com/zloi-user/hideip.me/master/socks5.txt
 https://raw.githubusercontent.com/zloi-user/hideip.me/master/http.txt
 https://raw.githubusercontent.com/zloi-user/hideip.me/master/https.txt
 
-# Mmpx12 HTTPS (Ваш новый список)
-https://raw.githubusercontent.com/mmpx12/proxy-list/master/https.txt
+# Vakhov (Свежие списки, хороший аптайм)
+https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/socks5.txt
+https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/http.txt
+
+# Mmpx12 (Новый перспективный список)
 https://raw.githubusercontent.com/mmpx12/proxy-list/master/socks5.txt
+https://raw.githubusercontent.com/mmpx12/proxy-list/master/https.txt
+
+# =======================================================
+# 3. 🎯 GEO TARGETING (Целевые страны)
+# Специфические выборки (Таиланд и др.)
+# =======================================================
+# ProxyScrape API (Прямой запрос на Таиланд/HTTP)
+https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=TH&ssl=all&anonymity=all
+
+# =======================================================
+# 4. 🌍 MASSIVE AGGREGATORS (Для массовки)
+# Огромные базы. Много прокси, но могут быть медленнее.
+# =======================================================
+# PrxChk (Хорошо отфильтрованный дамп)
+https://raw.githubusercontent.com/prxchk/proxy-list/main/socks5.txt
+https://raw.githubusercontent.com/prxchk/proxy-list/main/http.txt
+
+# JetKai (Огромный архив, если доступен)
+https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt
+https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt
 
 # ErcinDedeoglu (Большой микс)
 https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks5.txt
 https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/http.txt
 
-# RoosterKid (RAW - Высокое качество)
-https://raw.githubusercontent.com/roosterkid/openproxylist/main/SOCKS5_RAW.txt
-
-# B4RC0DE (SOCKS5)
-https://raw.githubusercontent.com/B4RC0DE-TM/proxy-list/main/SOCKS5.txt
-
-# RDavydov (SOCKS5)
-https://raw.githubusercontent.com/rdavydov/proxy-list/main/proxies/socks5.txt
-
 # =======================================================
-# 2. 🌟 PROVEN STABLE (Проверенная база)
+# 5. 🛡️ STABLE BACKBONE (Классика)
+# Проверенные временем репозитории-середнячки.
 # =======================================================
-# Hookzof (Классика)
-https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
-
-# JetKai (Регулярные апдейты)
-https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-socks5.txt
-
-# Monosans (Самый надежный)
-https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt
-
-# Vann-Dev (SOCKS5)
+# Vann-Dev
 https://raw.githubusercontent.com/Vann-Dev/proxy-list/main/proxies/socks5.txt
-
-# =======================================================
-# 3. 📦 HTTP / HTTPS BACKUP (Резерв)
-# =======================================================
-# JetKai HTTP
-https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt
-
-# Monosans HTTP
-https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt
-
-# Vann-Dev HTTP/HTTPS
 https://raw.githubusercontent.com/Vann-Dev/proxy-list/main/proxies/http.txt
 https://raw.githubusercontent.com/Vann-Dev/proxy-list/main/proxies/https.txt
 
-# =======================================================
-# 4. 🛡️ MASSIVE DUMPS (Большие базы)
-# =======================================================
-# TheSpeedX (Огромный архив)
-https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt
-https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt
+# B4RC0DE
+https://raw.githubusercontent.com/B4RC0DE-TM/proxy-list/main/SOCKS5.txt
+
+# RDavydov
+https://raw.githubusercontent.com/rdavydov/proxy-list/main/proxies/socks5.txt
+
+# Hookzof (Старая классика)
+https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
 
 # =======================================================
-# 5. 🚑 CDN BACKUP (Вечная ссылка)
+# 6. 🚑 CDN BACKUP (Аварийный резерв)
 # =======================================================
-# Proxifly (Через CDN)
-https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.txt
-
+# Proxifly
+https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt
