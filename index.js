@@ -54,7 +54,7 @@ const BAD_WORDS = [
     'packethub', 'cdn77', 'datacamp', 'm247', 'performive', 'tzulo', 
     'psychz', 'choopa', 'creanova', 'pfcloud', 'quadranet', 'colocrossing', 
     'buyvm', 'frantech', 'cogent', 'terrahost', 'ip volume', 'ipvolume', 
-    'servers.com', 'servers tech',
+    'servers.com', 'servers tech', 'llc vk',
 
     // === ГЕО И МУСОР ===
     'chinanet', 'china unicom', 'china mobile', 
