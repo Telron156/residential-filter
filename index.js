@@ -80,6 +80,9 @@ const BAD_WORDS = [
     'sgp1',             // Тег датацентра
     'digital energy',
     'fozzy', 'zomro', 'pq hosting',
+
+    // Блокировка Yandex Cloud
+    'yandex', 'yandex cloud', 'yandex.cloud', 'yandex llc'
     
     // === РЕСЕЛЛЕРЫ (ИМЕННЫЕ ПОДСЕТИ) ===
     'baykov',           // Baykov Ilya Sergeevich
