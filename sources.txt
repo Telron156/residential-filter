@@ -35,6 +35,8 @@ https://raw.githubusercontent.com/mmpx12/proxy-list/master/https.txt
 # =======================================================
 # ProxyScrape API (Прямой запрос на Таиланд/HTTP)
 https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=TH&ssl=all&anonymity=all
+# ProxyScrape API (Прямой запрос на Россию/HTTP)
+https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=RU&ssl=all&anonymity=all
 
 # =======================================================
 # 4. 🌍 MASSIVE AGGREGATORS (Для массовки)
