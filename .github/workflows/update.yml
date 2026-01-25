@@ -1,8 +1,8 @@
 name: Proxy Check & Update
 
 on:
-   # schedule:
-   #  - cron: '0 */2 * * *'  # Запуск каждые 2 часа
+  # schedule:
+  #   - cron: '0 */2 * * *'  # Запуск каждые 2 часа
   workflow_dispatch:       # Кнопка ручного запуска
 
 permissions:
@@ -30,12 +30,20 @@ jobs:
       run: node index.js
 
     - name: Commit results
+      if: always()  # <--- ВОТ ЭТО ГЛАВНОЕ: Выполнять шаг, даже если предыдущий упал
       run: |
         git config --global user.name "ProxyBot"
         git config --global user.email "bot@users.noreply.github.com"
         
-        # Добавляем результаты проверки
-        git add valid_proxies.txt valid_proxies_ru.txt
+        # Добавляем результаты проверки (даже если скрипт упал, файл уже частично заполнен)
+        # Обратите внимание: git add не упадет, даже если файл не изменился
+        git add valid_proxies.txt
         
-        # Коммитим только если есть изменения
-        git diff --quiet && git diff --staged --quiet || (git commit -m "🚀 Update proxies $(date)" && git push)
+        # Проверяем статус, есть ли что коммитить
+        if [[ -n $(git status -s) ]]; then
+          echo "Changes detected, committing..."
+          git commit -m "🚀 Update proxies $(date)"
+          git push
+        else
+          echo "No changes to commit."
+        fi
