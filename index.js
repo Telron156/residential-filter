@@ -7,9 +7,9 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 const https = require('https');
 
-// ===================== НАСТРОЙКИ (V8.6 OPTIMIZED) =====================
+// ===================== НАСТРОЙКИ (V8.9 UPDATED FILTERS) =====================
 const SOURCES_FILE = 'sources.txt';
-const OUTPUT_FILE = 'valid_proxies.txt';
+const OUTPUT_FILE = 'valid_proxies.txt'; // Сюда будут падать прокси сразу
 
 const TIMEOUT_MS = 10000;
 const THREADS = 200; 
@@ -27,30 +27,70 @@ const CRITICAL_ASNS = [
     'AS45090', 'AS8075', 'AS53667', 'AS36352', 'AS46606'
 ];
 
-// 3. ISP BAN
+// 3. ISP BAN (V8.2 - RESELLER PATCH)
 const BAD_WORDS = [
+    // === ГИГАНТЫ ХОСТИНГА ===
     'amazon', 'google cloud', 'azure', 'digitalocean', 'hetzner', 'ovh', 
     'linode', 'vultr', 'contabo', 'leaseweb', 'hostinger', 'selectel', 
     'timeweb', 'aeza', 'firstbyte', 'myarena', 'beget', 'reg.ru', 'mchost', 
     'activecloud', 'inferno', 'firstvds', 'vdsina', 'clouvider',
     'alibaba', 'tencent', 'oracle', 'ibm cloud', 'scaleway', 'kamatera',
-    'waicore', 'emerald onion', 'datawagon', 'g-core', 'gcore', 
-    'cloud assets', 'jsc iot', 'serv.host', 'oc networks',
+
+    // === ТОКСИЧНЫЕ, НАЙДЕННЫЕ В ЛОГАХ ===
+    'waicore',
+    'emerald onion',  // 🚨 TOR Exit Node
+    'datawagon',      // Хостинг
+    'g-core',         // CDN/Hosting
+    'gcore',          // CDN/Hosting
+    'cloud assets',   // Хостинг
+    'jsc iot',        // IoT шлюзы
+    'serv.host',      // Хостинг
+    'oc networks',    // Хостинг
+
+    // === ПРЕДЫДУЩИЕ УСПЕШНЫЕ ФИЛЬТРЫ ===
     'reliablesite', 'namecheap', 'godaddy', 'ionos', 'cloudflare', 
     'internet names', 'tierpoint', 'gigahost', 'green floid',
     'packethub', 'cdn77', 'datacamp', 'm247', 'performive', 'tzulo', 
     'psychz', 'choopa', 'creanova', 'pfcloud', 'quadranet', 'colocrossing', 
     'buyvm', 'frantech', 'cogent', 'terrahost', 'ip volume', 'ipvolume', 
     'servers.com', 'servers tech', 'llc vk',
-    'chinanet', 'china unicom', 'china mobile', 'tor exit', 'tor node', 'onion', 
-    'opera', 'opera software', 'zscaler', 'vpn', 'hosting', 'data center', 
-    'dedicated', 'cdn', 'vps', 'webnx', 'tier.net', 'hostpapa', 'coloup', 
-    'worktitans', 'wholesale internet', 'llc horizon', 'llc "horizon"',    
-    'radist ltd', 'hnns', 'tyo1', 'sgp1', 'digital energy',
-    'fozzy', 'zomro', 'pq hosting', 'yandex', 'yandex cloud', 
-    'yandex.cloud', 'yandex llc', 'baykov', 'mulgin', 'miglovets', 'reznichenko'
+
+    // === ГЕО И МУСОР ===
+    'chinanet', 'china unicom', 'china mobile', 
+    'tor exit', 'tor node', 'onion', 
+    'opera', 'opera software',
+    'zscaler', 
+
+    // === СТОП-СЛОВА ===
+    'vpn', 'hosting', 'data center', 'dedicated', 'cdn', 'vps',
+
+    // === НОВЫЕ (ПАТЧ ИЗ ТВОИХ ЛОГОВ - УТОЧНЕННЫЕ) ===
+    'webnx',            // Хостинг
+    'tier.net',         // Хостинг
+    'hostpapa',         // Хостинг
+    'coloup',           // Хостинг
+    'worktitans',       // Хостинг
+    'wholesale internet', // Исправлено (полное название)
+    'llc horizon',      // Исправлено (RU хостинг)
+    'llc "horizon"',    
+    'radist ltd',       // Исправлено (точное название)
+    'hnns', 
+    'tyo1',             // Тег датацентра
+    'sgp1',             // Тег датацентра
+    'digital energy',
+    'fozzy', 'zomro', 'pq hosting',
+
+    // Блокировка Yandex Cloud
+    'yandex', 'yandex cloud', 'yandex.cloud', 'yandex llc',
+
+    // === РЕСЕЛЛЕРЫ (ИМЕННЫЕ ПОДСЕТИ) ===
+    'baykov',           // Baykov Ilya Sergeevich
+    'mulgin',           // Mulgin Alexander Sergeevich
+    'miglovets',        // Miglovets Egor Andreevich
+    'reznichenko'       // Reznichenko Sergey Mykolayovich
 ];
 
+// Переменные для статистики
 let PROXIES_RU_MOBILE = [];
 let PROXIES_RU_OTHER = [];
 let PROXIES_GLOBAL_MOBILE = [];
@@ -70,22 +110,18 @@ const http = axios.create({
 });
 
 function saveAndExit() {
-    console.log('\n💾 СОХРАНЕНИЕ С ПРИОРИТЕТОМ (RU + MOBILE TOP)...');
-    const combined = [
-        ...PROXIES_RU_MOBILE,
-        ...PROXIES_RU_OTHER,
-        ...PROXIES_GLOBAL_MOBILE,
-        ...PROXIES_GLOBAL_OTHER
-    ];
-    const unique = [...new Set(combined)];
+    console.log('\n🛑 ЗАВЕРШЕНИЕ РАБОТЫ СКРИПТА...');
+    console.log('✅ ИТОГОВАЯ СТАТИСТИКА (Все найденные прокси уже в файле):');
+    
+    // Считаем общее количество для отчета
+    const total = PROXIES_RU_MOBILE.length + PROXIES_RU_OTHER.length + PROXIES_GLOBAL_MOBILE.length + PROXIES_GLOBAL_OTHER.length;
 
-    if (unique.length > 0) {
-        fs.writeFileSync(OUTPUT_FILE, unique.join('\n'));
-        console.log(`✅ TOTAL: ${unique.length}`);
+    if (total > 0) {
+        console.log(`✅ ВСЕГО НАЙДЕНО: ${total}`);
         console.log(`📊 RU: ${PROXIES_RU_MOBILE.length} Mob / ${PROXIES_RU_OTHER.length} Other`);
         console.log(`📊 GLOBAL: ${PROXIES_GLOBAL_MOBILE.length} Mob / ${PROXIES_GLOBAL_OTHER.length} Other`);
     } else { 
-        console.log('⚠️ Пусто.'); 
+        console.log('⚠️ Ничего не найдено.'); 
     }
     process.exit(0);
 }
@@ -186,6 +222,15 @@ async function checkResidential(rawLine) {
 
         const res = `${protocol}://${host}:${port}`;
         
+        // ==========================================
+        // 🔥 МГНОВЕННАЯ ЗАПИСЬ В ФАЙЛ
+        // ==========================================
+        try {
+            fs.appendFileSync(OUTPUT_FILE, res + '\n');
+        } catch (fileErr) {
+            console.error('❌ Ошибка записи в файл:', fileErr.message);
+        }
+
         if (isRu) {
             if (d.mobile) PROXIES_RU_MOBILE.push(res);
             else PROXIES_RU_OTHER.push(res);
@@ -220,18 +265,25 @@ async function runner(items) {
 }
 
 async function main() {
-    console.log('--- SCANNER V8.7 ULTIMATE (SMART REGEX PARSER) ---');
+    console.log('--- SCANNER V8.9 STREAM SAVE (UPDATED FILTERS) ---');
     if (!fs.existsSync(SOURCES_FILE)) {
         console.log(`❌ Файл ${SOURCES_FILE} не найден!`);
         return;
     }
     
+    // =======================================
+    // 🔥 ОЧИСТКА ФАЙЛА НА СТАРТЕ
+    // =======================================
+    try {
+        fs.writeFileSync(OUTPUT_FILE, ''); 
+        console.log(`🗑️  Файл ${OUTPUT_FILE} очищен и готов к записи.`);
+    } catch (e) {
+        console.log(`⚠️ Ошибка очистки файла: ${e.message}`);
+    }
+
     const lines = fs.readFileSync(SOURCES_FILE, 'utf-8').split(/\r?\n/);
     const set = new Set();
     
-    // 🧠 УМНАЯ РЕГУЛЯРКА
-    // Ищет: Числа.Числа.Числа.Числа:Числа
-    // Игнорирует всё, что до и всё, что после
     const ipPortRegex = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)/;
     
     for (const l of lines) {
@@ -245,16 +297,14 @@ async function main() {
                 const text = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
                 
                 text.split(/\r?\n/).forEach(proxyLine => {
-                    // Применяем скальпель к каждой строке из интернета
                     const match = proxyLine.match(ipPortRegex);
                     if (match) {
-                        set.add(match[1]); // Добавляем только чистый IP:PORT
+                        set.add(match[1]); 
                     }
                 });
                 
             } catch (e) { console.log(`Ошибка источника: ${e.message}`); }
         } else {
-             // Локальные строки тоже чистим скальпелем
              const match = trimmed.match(ipPortRegex);
              if (match) set.add(match[1]);
         }
@@ -267,6 +317,7 @@ async function main() {
     await runner(tasks);
     saveAndExit();
 }
+
 main().catch(e => {
     console.error('FATAL ERROR:', e);
     process.exit(1);
