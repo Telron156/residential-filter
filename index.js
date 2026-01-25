@@ -220,7 +220,7 @@ async function runner(items) {
 }
 
 async function main() {
-    console.log('--- SCANNER V8.6 ULTIMATE (OPTIMIZED DEDUPLICATION) ---');
+    console.log('--- SCANNER V8.7 ULTIMATE (SMART REGEX PARSER) ---');
     if (!fs.existsSync(SOURCES_FILE)) {
         console.log(`❌ Файл ${SOURCES_FILE} не найден!`);
         return;
@@ -228,6 +228,11 @@ async function main() {
     
     const lines = fs.readFileSync(SOURCES_FILE, 'utf-8').split(/\r?\n/);
     const set = new Set();
+    
+    // 🧠 УМНАЯ РЕГУЛЯРКА
+    // Ищет: Числа.Числа.Числа.Числа:Числа
+    // Игнорирует всё, что до и всё, что после
+    const ipPortRegex = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+)/;
     
     for (const l of lines) {
         const trimmed = l.trim();
@@ -239,37 +244,26 @@ async function main() {
                 const r = await sourceLoader.get(trimmed);
                 const text = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
                 
-                // === ОПТИМИЗИРОВАННЫЙ БЛОК ПАРСИНГА ===
                 text.split(/\r?\n/).forEach(proxyLine => {
-                    let clean = proxyLine.trim();
-                    // Удаляем протокол ПЕРЕД добавлением в Set, чтобы избежать дублей (http://ip:port vs ip:port)
-                    if (clean.includes('://')) {
-                        clean = clean.split('://')[1];
-                    }
-                    if (clean.length > 6 && clean.includes(':') && /\d/.test(clean)) {
-                        set.add(clean);
+                    // Применяем скальпель к каждой строке из интернета
+                    const match = proxyLine.match(ipPortRegex);
+                    if (match) {
+                        set.add(match[1]); // Добавляем только чистый IP:PORT
                     }
                 });
-                // =======================================
                 
             } catch (e) { console.log(`Ошибка источника: ${e.message}`); }
         } else {
-             // Локальные строки тоже чистим
-             let cleanLocal = trimmed;
-             if (cleanLocal.includes('://')) cleanLocal = cleanLocal.split('://')[1];
-             if (cleanLocal.length > 6 && cleanLocal.includes(':')) set.add(cleanLocal);
+             // Локальные строки тоже чистим скальпелем
+             const match = trimmed.match(ipPortRegex);
+             if (match) set.add(match[1]);
         }
     }
 
     const tasks = Array.from(set);
-    console.log(`\n🔎 ЗАДАЧА: ${tasks.length} уникальных IP. Старт через 2 сек...`);
+    console.log(`\n🔎 ЗАДАЧА: ${tasks.length} уникальных IP (Очищенных). Старт через 2 сек...`);
     await new Promise(r => setTimeout(r, 2000));
     
     await runner(tasks);
     saveAndExit();
 }
-
-main().catch(e => {
-    console.error('FATAL ERROR:', e);
-    process.exit(1);
-});
