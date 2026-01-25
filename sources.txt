@@ -56,6 +56,7 @@ https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=100
 # =======================================================
 # TheSpeedX (Огромный архив - дает объем)
 https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/socks5.txt
+https://raw.githubusercontent.com/TheSpeedX/SOCKS-List/master/http.txt
 
 # PrxChk (Хорошо отфильтрованный дамп)
 https://raw.githubusercontent.com/prxchk/proxy-list/main/socks5.txt
