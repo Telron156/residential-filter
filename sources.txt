@@ -84,3 +84,7 @@ https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
 # =======================================================
 # Proxifly
 https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/protocols/socks5/data.txt
+
+
+https://raw.githubusercontent.com/r00tee/Proxy-List/main/Socks5.txt
+https://raw.githubusercontent.com/r00tee/Proxy-List/main/Https.txt
