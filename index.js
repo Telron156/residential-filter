@@ -267,3 +267,7 @@ async function main() {
     await runner(tasks);
     saveAndExit();
 }
+main().catch(e => {
+    console.error('FATAL ERROR:', e);
+    process.exit(1);
+});
