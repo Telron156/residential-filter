@@ -182,7 +182,6 @@ async function checkResidential(rawLine) {
     let clean = rawLine.trim();
     if (clean.length < 5) return;
     
-    // Чистим еще раз на всякий случай, если пришло из другого места
     if (clean.includes('://')) clean = clean.split('://')[1];
 
     const lastColonIndex = clean.lastIndexOf(':');
@@ -218,13 +217,13 @@ async function checkResidential(rawLine) {
         const isRu = d.countryCode === 'RU';
         const typeIcon = d.mobile ? '📱' : (d.hosting ? '🏢' : '🏠');
         
-        console.log(`✅ [${protocol.toUpperCase()}] ${d.countryCode} ${typeIcon} ${latency}ms | ${(d.isp || '').substring(0, 25)}`);
-
+        // Формируем полную строку прокси
         const res = `${protocol}://${host}:${port}`;
-        
-        // ==========================================
-        // 🔥 МГНОВЕННАЯ ЗАПИСЬ В ФАЙЛ
-        // ==========================================
+
+        // === [UPDATED LOG] ВЫВОД САМОГО ПРОКСИ В КОНСОЛЬ ===
+        console.log(`✅ [${protocol.toUpperCase()}] ${d.countryCode} ${typeIcon} ${latency}ms | ${(d.isp || '').substring(0, 20)}... | ${res}`);
+
+        // Запись в файл (уже была у вас, оставляем)
         try {
             fs.appendFileSync(OUTPUT_FILE, res + '\n');
         } catch (fileErr) {
