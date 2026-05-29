@@ -12,7 +12,7 @@ const SOURCES_FILE = 'sources.txt';
 const OUTPUT_FILE = 'valid_proxies.txt'; // Сюда будут падать прокси сразу
 
 const TIMEOUT_MS = 10000;
-const THREADS = 200; 
+const THREADS = 50; 
 
 // 1. HARD BAN
 const BANNED_RANGES = [
