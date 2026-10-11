@@ -38,3 +38,7 @@ https://raw.githubusercontent.com/Vann-Dev/proxy-list/main/proxies/http.txt
 # PrxChk
 https://raw.githubusercontent.com/prxchk/proxy-list/main/socks5.txt
 https://raw.githubusercontent.com/prxchk/proxy-list/main/http.txt
+
+# Rcloak
+https://rcloak.com/api/proxies/raw?protocol=socks5
+https://rcloak.com/api/proxies/raw?protocol=http
